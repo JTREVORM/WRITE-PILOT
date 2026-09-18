@@ -750,7 +750,188 @@ begin
 end $$;
 
 -- =============================================================================
-\echo '== 9. Cleanup =============================================================='
+\echo '== 9. Grammar checks ======================================================='
+-- =============================================================================
+-- A grammar check is the first thing in the schema a user session writes to.
+-- The guard around that write is what these tests are really about.
+
+do $$
+declare
+  v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+  v_bob   uuid := (select id from wp_test.fixtures where name = 'bob');
+  v_check uuid;
+begin
+  insert into public.grammar_checks (
+    user_id, title, source, content, word_count, character_count, summary
+  )
+  values (
+    v_alice, 'Cover letter', 'text',
+    'I are writing to apply. The the role interests me.',
+    10, 50, 'Two corrections found.'
+  )
+  returning id into v_check;
+
+  insert into public.grammar_suggestions (
+    check_id, position, start_offset, end_offset,
+    category, severity, original_text, suggested_text, explanation
+  )
+  values
+    (v_check, 0, 2, 5, 'grammar', 'correction', 'are', 'am',
+     'Subject-verb agreement: "I" takes "am".'),
+    (v_check, 1, 26, 33, 'repetition', 'correction', 'The the', 'The',
+     'The word "the" is repeated.');
+
+  insert into public.grammar_checks
+    (user_id, title, content, word_count, character_count)
+  values (v_bob, 'Bob''s draft', 'Bob wrote this.', 3, 15);
+
+  perform wp_test.assert_eq(
+    (select count(*)::int from public.grammar_suggestions where check_id = v_check),
+    2, 'suggestions are stored'
+  );
+  perform wp_test.assert_eq(
+    (select count(*)::int from public.grammar_suggestions where status = 'pending'),
+    2, 'suggestions start pending'
+  );
+end $$;
+
+begin;
+  set local role authenticated;
+  set local request.jwt.claim.role = 'authenticated';
+
+  do $$
+  declare
+    v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+    v_id    uuid;
+  begin
+    execute format('set local request.jwt.claim.sub = %L', v_alice);
+
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.grammar_checks), 1,
+      'a user sees only their own checks'
+    );
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.grammar_suggestions), 2,
+      'suggestion visibility follows the parent check'
+    );
+
+    -- Accepting is the user's own decision on their own check.
+    select id into v_id from public.grammar_suggestions where position = 0;
+    update public.grammar_suggestions set status = 'accepted' where id = v_id;
+
+    perform wp_test.assert_eq(
+      (select status::text from public.grammar_suggestions where id = v_id),
+      'accepted', 'a user can accept their own suggestion'
+    );
+    perform wp_test.assert(
+      (select resolved_at from public.grammar_suggestions where id = v_id) is not null,
+      'accepting stamps resolved_at server-side'
+    );
+
+    -- Undo.
+    update public.grammar_suggestions set status = 'pending' where id = v_id;
+    perform wp_test.assert(
+      (select resolved_at from public.grammar_suggestions where id = v_id) is null,
+      'undoing clears resolved_at'
+    );
+
+    -- The guard: accepting must not be a way to rewrite what gets inserted.
+    update public.grammar_suggestions
+    set status = 'accepted',
+        suggested_text = 'ARBITRARY INJECTED TEXT',
+        original_text = 'nonsense',
+        start_offset = 0,
+        end_offset = 99
+    where id = v_id;
+
+    perform wp_test.assert_eq(
+      (select suggested_text from public.grammar_suggestions where id = v_id),
+      'am', 'a user cannot change the suggested replacement text'
+    );
+    perform wp_test.assert_eq(
+      (select original_text from public.grammar_suggestions where id = v_id),
+      'are', 'a user cannot change the text a suggestion replaces'
+    );
+    perform wp_test.assert_eq(
+      (select end_offset from public.grammar_suggestions where id = v_id),
+      5, 'a user cannot move a suggestion''s range'
+    );
+    perform wp_test.assert_eq(
+      (select status::text from public.grammar_suggestions where id = v_id),
+      'accepted', 'the status change in the same statement still applies'
+    );
+  end $$;
+
+  select wp_test.assert_denied(
+    $q$insert into public.grammar_checks
+         (user_id, title, content, word_count, character_count)
+       select id, 'Forged', 'x', 1, 1 from wp_test.fixtures where name = 'alice'$q$,
+    'a user cannot create a check directly');
+  select wp_test.assert_denied(
+    $q$update public.grammar_checks set content = 'rewritten'$q$,
+    'a user cannot rewrite the original text of a check');
+  select wp_test.assert_denied(
+    $q$insert into public.grammar_suggestions
+         (check_id, position, start_offset, end_offset, category, original_text, suggested_text)
+       select id, 99, 0, 1, 'grammar', 'a', 'b' from public.grammar_checks limit 1$q$,
+    'a user cannot invent a suggestion');
+  select wp_test.assert_denied(
+    'delete from public.grammar_suggestions',
+    'a user cannot delete suggestions independently of their check');
+commit;
+
+-- Another user's check is untouchable even by id.
+begin;
+  set local role authenticated;
+  set local request.jwt.claim.role = 'authenticated';
+
+  do $$
+  declare
+    v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+    v_bob   uuid := (select id from wp_test.fixtures where name = 'bob');
+    v_moved integer;
+  begin
+    execute format('set local request.jwt.claim.sub = %L', v_alice);
+
+    update public.grammar_suggestions set status = 'rejected'
+    where check_id in (select id from public.grammar_checks where user_id = v_bob);
+    get diagnostics v_moved = row_count;
+
+    perform wp_test.assert_eq(
+      v_moved, 0, 'a user cannot resolve suggestions on another user''s check'
+    );
+  end $$;
+commit;
+
+begin;
+  set local role authenticated;
+  set local request.jwt.claim.role = 'authenticated';
+
+  do $$
+  declare
+    v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+    v_id    uuid;
+  begin
+    execute format('set local request.jwt.claim.sub = %L', v_alice);
+    select id into v_id from public.grammar_checks limit 1;
+    delete from public.grammar_checks where id = v_id;
+
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.grammar_checks), 0,
+      'a user can delete their own check'
+    );
+  end $$;
+commit;
+
+do $$ begin
+  perform wp_test.assert_eq(
+    (select count(*)::int from public.grammar_suggestions), 0,
+    'deleting a check cascades to its suggestions'
+  );
+end $$;
+
+-- =============================================================================
+\echo '== 10. Cleanup =============================================================='
 -- =============================================================================
 
 do $$ begin

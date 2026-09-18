@@ -18,6 +18,7 @@ nor its own UI code for those decisions.
 | `migrations/20250101000600_seed_catalog.sql` | Starting plans, features, limits and credit packs |
 | `migrations/20250102000000_notifications_guard.sql` | Column guard for user-visible notification updates |
 | `migrations/20250103000000_ai_scans.sql` | `ai_scans`, `ai_scan_segments` and their policies |
+| `migrations/20250104000000_grammar_checks.sql` | `grammar_checks`, `grammar_suggestions`, the status guard |
 | `tests/database.test.sql` | Behavioural tests, including the RLS denial cases |
 
 ## Applying it
@@ -60,6 +61,8 @@ suite cleans up after itself and can be re-run. It covers:
   rewriting a notification's text
 - detection scans: owner-only reads, no client writes, user-initiated deletion,
   and the cascade from a scan to its paragraph segments
+- grammar checks: accepting and dismissing a suggestion, and the guard that
+  stops a user rewriting what a suggestion would insert
 - **Row Level Security**: that a user cannot read another user's data, cannot
   raise their own credit balance, cannot grant themselves a role, cannot change
   their own plan, and cannot execute any privileged function
@@ -89,6 +92,12 @@ text that was analysed, because a likelihood with no way to see which paragraphs
 drove it is not actionable. Administering the platform does not require reading
 customers' unpublished writing, so that access simply does not exist — and the
 owner can delete a scan at any time.
+
+**A user session may move `grammar_suggestions.status`, and nothing else.**
+Accepting a suggestion is the user's own decision on their own document, so RLS
+authorises it directly rather than routing it through the service role. The
+column guard is what makes that safe: without it, "accept" could be turned into
+a way to splice arbitrary text into the document the tool then hands back.
 
 **Roles are not in the JWT.** They live in `user_roles` and are read per request,
 so revoking an admin takes effect immediately rather than at the next token

@@ -22,6 +22,7 @@ export const routes = {
 
   dashboard: "/dashboard",
   aiDetector: "/tools/ai-detector",
+  grammar: "/tools/grammar",
   documents: "/documents",
   usage: "/usage",
   billing: "/billing",

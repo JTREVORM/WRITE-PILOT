@@ -10,15 +10,15 @@ professionals worldwide.
 
 ## Where the project stands
 
-**Phases 1–3 are complete.** Authentication, profiles, roles, plans,
+**Phases 1–4 are complete.** Authentication, profiles, roles, plans,
 subscriptions, the credit ledger, usage tracking and Row Level Security (Phase
 1); the streaming dashboard, notification centre, theme control and the rest of
 the application shell (Phase 2); the AI Detector, the provider layer and
-document text extraction (Phase 3).
+document text extraction (Phase 3); the Grammar Checker (Phase 4).
 
-The remaining tools — grammar, naturalize, grader, citations — arrive in later
-phases. They are visible in the navigation marked "Soon" rather than linking to
-routes that do not exist.
+The remaining tools — naturalize, grader, citations — arrive in later phases.
+They are visible in the navigation marked "Soon" rather than linking to routes
+that do not exist.
 
 ## Stack
 
@@ -87,12 +87,15 @@ src/
     auth/              Forms bound to server actions
     dashboard/         Streamed sections, stat cards, quick actions, setup notice
     detection/         Likelihood meter, paragraph view, signals, scan form
+    grammar/           Interactive workspace, readability panel, check form
   lib/
     env/               Zod-validated environment, split public vs server-only
     theme/             Theme preference: cookie, server read, server action
     notifications/     In-app notification reads and mutations
     ai/                Provider contract and the Anthropic implementation
+    text/              Sentence and paragraph segmentation, shared by features
     detection/         AI Detector: signals, scoring, prompt, orchestration
+    grammar/           Grammar Checker: readability, locating, applying, prompt
     documents/         Upload text extraction (PDF, DOCX, TXT)
     supabase/          Browser, server, proxy and service-role clients
     auth/              Sessions, role guards, server actions, provisioning
@@ -198,6 +201,34 @@ every result rather than behind a link, and the prompt explicitly instructs
 against penalising non-native English writers. These are covered by tests, not
 just convention.
 
+### How the Grammar Checker works
+
+Every suggestion is a replacement of one exact fragment. The model quotes the
+fragment and names the sentence it came from; `locate.ts` finds that fragment
+*inside that sentence* and computes the offsets. Anything it cannot find
+verbatim is dropped — failing closed costs a suggestion, whereas guessing
+corrupts someone's document.
+
+The stored text is never rewritten. The corrected version is derived on every
+render by applying whichever suggestions the user has accepted, which is what
+makes undo exact: rejecting everything returns the original characters. That
+property is asserted directly in the tests.
+
+The interaction is optimistic — accept, dismiss and undo land immediately and
+persist in the background — and `status` is the one column a user session can
+move. A database trigger pins the rest, so accepting a suggestion can never be
+turned into a way to splice arbitrary text into the document.
+
+Readability (Flesch Reading Ease, Flesch–Kincaid grade) is computed locally from
+published formulas, so it is reproducible. It is reported as a property of the
+text, with the audience described in words and an explicit note that dense
+specialist prose scoring low is normal rather than a fault.
+
+The prompt spends as much space on what *not* to flag as on what to find:
+regional spelling, the serial comma, contractions, technical terms and quoted
+material are all left alone. A checker that flattens a writer's voice into house
+style is worse than one that finds fewer issues.
+
 ### Theme
 
 Light, dark or follow-the-system, stored in a cookie and rendered into the HTML
@@ -257,8 +288,9 @@ across every surface.
 | 1 | Foundation: auth, profiles, plans, credits, usage, RLS, shell | **Complete** |
 | 2 | Dashboard and application shell | **Complete** |
 | 3 | AI Detector | **Complete** |
-| 4 | Grammar Checker | Next |
-| 5–7 | Naturalize, AI Grader, Citations | Planned |
+| 4 | Grammar Checker | **Complete** |
+| 5 | Naturalize | Next |
+| 6–7 | AI Grader, Citation Checker | Planned |
 | 8 | Document and assignment workspaces | Planned |
 | 9 | Writing Coach and priority improvements | Planned |
 | 10 | Subscriptions, payments, plan enforcement | Planned |

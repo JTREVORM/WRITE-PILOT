@@ -328,6 +328,62 @@ function check(condition, passed, failed) {
   await ctx.close();
 }
 
+// --- grammar workspace --------------------------------------------------------
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto(`${BASE_URL}${process.env.GRAMMAR_PATH ?? "/shell-preview/grammar"}`, {
+    waitUntil: "networkidle",
+  });
+
+  // The marks are produced from offsets the real locating pipeline computed.
+  const markCount = await page.locator("mark").count();
+  check(markCount === 4, `all four suggestions are marked inline (got ${markCount})`);
+
+  const marks = await page.locator("mark").allInnerTexts();
+  check(
+    marks.includes("are") && marks.includes("The the"),
+    `marks land on the right fragments (got ${JSON.stringify(marks)})`,
+  );
+
+  const cards = await page.locator("ul li").filter({ hasText: "Accept" }).count();
+  check(cards === 4, `every suggestion has a card (got ${cards})`);
+
+  check(
+    /4\s*open/i.test(await page.locator("body").innerText()),
+    "the toolbar counts the open suggestions",
+  );
+
+  // Severity filtering is pure client state.
+  await page.getByRole("button", { name: /^Correction/ }).click();
+  await page.waitForTimeout(200);
+  const filtered = await page.locator("ul li").filter({ hasText: "Accept" }).count();
+  check(
+    filtered === 2,
+    `filtering to corrections narrows the list (got ${filtered}, expected 2)`,
+  );
+
+  await page.getByRole("button", { name: /^All/ }).click();
+  await page.waitForTimeout(200);
+  check(
+    (await page.locator("ul li").filter({ hasText: "Accept" }).count()) === 4,
+    "clearing the filter restores the full list",
+  );
+
+  check(
+    /Reading ease|readability/i.test(await page.locator("body").innerText()),
+    "the readability panel renders",
+  );
+
+  check(errors.length === 0, "no uncaught client errors in the grammar workspace",
+    `client errors: ${errors.slice(0, 2).join(" | ")}`);
+
+  await page.screenshot({ path: `${SHOT_DIR}/grammar-workspace.png`, fullPage: true });
+  await ctx.close();
+}
+
 await browser.close();
 console.log(failures === 0 ? "\nInteraction checks passed." : `\n${failures} failed.`);
 process.exit(failures === 0 ? 0 : 1);

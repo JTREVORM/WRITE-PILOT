@@ -229,6 +229,56 @@ export type UsageCounterRow = {
   updated_at: string;
 };
 
+export type SuggestionCategory =
+  | "grammar"
+  | "spelling"
+  | "punctuation"
+  | "structure"
+  | "tense"
+  | "word_choice"
+  | "clarity"
+  | "repetition"
+  | "wordiness";
+
+export type SuggestionSeverity = "correction" | "improvement" | "consideration";
+
+export type SuggestionStatus = "pending" | "accepted" | "rejected";
+
+export type GrammarCheckRow = {
+  id: string;
+  user_id: string;
+  title: string;
+  source: ScanSource;
+  source_filename: string | null;
+  content: string;
+  word_count: number;
+  character_count: number;
+  readability: Json;
+  summary: string | null;
+  provider: string | null;
+  model: string | null;
+  duration_ms: number | null;
+  credits_charged: number;
+  credit_transaction_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type GrammarSuggestionRow = {
+  id: string;
+  check_id: string;
+  position: number;
+  start_offset: number;
+  end_offset: number;
+  category: SuggestionCategory;
+  severity: SuggestionSeverity;
+  original_text: string;
+  suggested_text: string;
+  explanation: string | null;
+  status: SuggestionStatus;
+  resolved_at: string | null;
+};
+
 export type AiScanRow = {
   id: string;
   user_id: string;
@@ -337,6 +387,20 @@ export type Database = {
         | "end_offset"
         | "estimated_ai_likelihood"
       >;
+      grammar_checks: Table<
+        GrammarCheckRow,
+        "user_id" | "title" | "content" | "word_count" | "character_count"
+      >;
+      grammar_suggestions: Table<
+        GrammarSuggestionRow,
+        | "check_id"
+        | "position"
+        | "start_offset"
+        | "end_offset"
+        | "category"
+        | "original_text"
+        | "suggested_text"
+      >;
     };
     Views: Record<string, never>;
     Functions: {
@@ -420,6 +484,9 @@ export type Database = {
       usage_status: UsageStatus;
       scan_source: ScanSource;
       detection_confidence: DetectionConfidence;
+      suggestion_category: SuggestionCategory;
+      suggestion_severity: SuggestionSeverity;
+      suggestion_status: SuggestionStatus;
     };
     CompositeTypes: Record<string, never>;
   };

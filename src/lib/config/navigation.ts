@@ -57,10 +57,10 @@ export const navigation: NavSection[] = [
       },
       {
         label: "Grammar Checker",
-        href: "/tools/grammar",
+        href: routes.grammar,
         icon: "grammar",
         description: "Grammar, clarity and readability suggestions",
-        available: false,
+        available: true,
       },
       {
         label: "Naturalize",
@@ -143,10 +143,10 @@ export const quickActions: NavItem[] = [
   },
   {
     label: "Check Grammar",
-    href: "/tools/grammar",
+    href: routes.grammar,
     icon: "grammar",
     description: "Fix grammar and clarity",
-    available: false,
+    available: true,
   },
   {
     label: "Naturalize",
