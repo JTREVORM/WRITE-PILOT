@@ -1,0 +1,372 @@
+/**
+ * Typed contract for the WritePilot Postgres schema.
+ *
+ * Kept in step with `supabase/migrations/*`. Once the Supabase CLI is wired up
+ * in CI this file can be regenerated with:
+ *   supabase gen types typescript --local > src/types/database.ts
+ * It is written by hand for now so that the application is fully typed without
+ * requiring a running database at build time.
+ */
+
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[];
+
+export type AppRole = "user" | "educator" | "admin";
+
+export type UserType =
+  | "student"
+  | "researcher"
+  | "educator"
+  | "professional"
+  | "other";
+
+export type SubscriptionStatus =
+  | "trialing"
+  | "active"
+  | "past_due"
+  | "paused"
+  | "canceled"
+  | "incomplete"
+  | "expired";
+
+export type BillingInterval = "month" | "year";
+
+export type CreditTransactionType =
+  | "signup_grant"
+  | "plan_grant"
+  | "purchase"
+  | "consumption"
+  | "refund"
+  | "expiry"
+  | "admin_adjustment";
+
+export type UsageStatus = "success" | "failure" | "rejected";
+
+/** Feature keys seeded in 0007. New keys are a data change, not a type change. */
+export type FeatureKey =
+  | "grammar_check"
+  | "ai_detection"
+  | "naturalize"
+  | "citation_check"
+  | "ai_grading"
+  | "rubric_analysis"
+  | "writing_coach"
+  | "deep_analysis"
+  | "document_upload";
+
+export type PlanKey = "free" | "student" | "pro" | "educator";
+
+export type ProfileRow = {
+  id: string;
+  email: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  country: string | null;
+  timezone: string;
+  locale: string;
+  user_type: UserType;
+  marketing_opt_in: boolean;
+  onboarding_completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type UserRoleRow = {
+  user_id: string;
+  role: AppRole;
+  granted_by: string | null;
+  granted_at: string;
+};
+
+export type FeatureRow = {
+  key: string;
+  name: string;
+  description: string | null;
+  category: string;
+  credit_cost: number;
+  max_words: number | null;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PlanRow = {
+  id: string;
+  key: string;
+  name: string;
+  tagline: string | null;
+  description: string | null;
+  currency: string;
+  price_monthly_cents: number;
+  price_yearly_cents: number;
+  monthly_credits: number;
+  max_documents: number | null;
+  max_file_size_mb: number;
+  max_words_per_request: number | null;
+  max_document_versions: number | null;
+  credits_roll_over: boolean;
+  priority_processing: boolean;
+  is_public: boolean;
+  is_active: boolean;
+  is_highlighted: boolean;
+  sort_order: number;
+  provider_price_id_monthly: string | null;
+  provider_price_id_yearly: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PlanFeatureRow = {
+  plan_id: string;
+  feature_key: string;
+  is_enabled: boolean;
+  credit_cost_override: number | null;
+  monthly_limit: number | null;
+  max_words_override: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SubscriptionRow = {
+  id: string;
+  user_id: string;
+  plan_id: string;
+  status: SubscriptionStatus;
+  billing_interval: BillingInterval;
+  current_period_start: string;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+  canceled_at: string | null;
+  trial_ends_at: string | null;
+  provider: string;
+  provider_customer_id: string | null;
+  provider_subscription_id: string | null;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreditPackRow = {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  credits: number;
+  price_cents: number;
+  currency: string;
+  is_active: boolean;
+  sort_order: number;
+  provider_price_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreditWalletRow = {
+  user_id: string;
+  balance: number;
+  purchased_balance: number;
+  monthly_allowance: number;
+  period_start: string;
+  period_end: string | null;
+  lifetime_granted: number;
+  lifetime_purchased: number;
+  lifetime_consumed: number;
+  updated_at: string;
+};
+
+export type CreditTransactionRow = {
+  id: string;
+  user_id: string;
+  type: CreditTransactionType;
+  amount: number;
+  balance_after: number;
+  feature_key: string | null;
+  reason: string | null;
+  reference_type: string | null;
+  reference_id: string | null;
+  idempotency_key: string | null;
+  metadata: Json;
+  created_at: string;
+};
+
+export type UsageLogRow = {
+  id: string;
+  user_id: string;
+  feature_key: string;
+  plan_key: string | null;
+  status: UsageStatus;
+  credits_charged: number;
+  words_processed: number;
+  characters_processed: number;
+  duration_ms: number | null;
+  provider: string | null;
+  model: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  reference_type: string | null;
+  reference_id: string | null;
+  metadata: Json;
+  created_at: string;
+};
+
+export type UsageCounterRow = {
+  user_id: string;
+  feature_key: string;
+  period_start: string;
+  used_count: number;
+  credits_used: number;
+  words_used: number;
+  updated_at: string;
+};
+
+export type NotificationRow = {
+  id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  action_url: string | null;
+  read_at: string | null;
+  created_at: string;
+};
+
+export type AuditLogRow = {
+  id: string;
+  actor_id: string | null;
+  actor_role: AppRole | null;
+  action: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  metadata: Json;
+  created_at: string;
+};
+
+/**
+ * Table definition helper.
+ *
+ * `Row` is authoritative. `Insert` makes every column optional except those
+ * listed in `Required` — i.e. the columns with no database default — which
+ * mirrors what PostgREST will actually accept.
+ */
+type Table<Row, Required extends keyof Row = never> = {
+  Row: Row;
+  Insert: Partial<Row> & Pick<Row, Required>;
+  Update: Partial<Row>;
+  Relationships: [];
+};
+
+export type Database = {
+  public: {
+    Tables: {
+      profiles: Table<ProfileRow, "id" | "email">;
+      user_roles: Table<UserRoleRow, "user_id" | "role">;
+      features: Table<FeatureRow, "key" | "name">;
+      plans: Table<PlanRow, "key" | "name">;
+      plan_features: Table<PlanFeatureRow, "plan_id" | "feature_key">;
+      subscriptions: Table<SubscriptionRow, "user_id" | "plan_id">;
+      credit_packs: Table<CreditPackRow, "key" | "name" | "credits" | "price_cents">;
+      credit_wallets: Table<CreditWalletRow, "user_id">;
+      credit_transactions: Table<
+        CreditTransactionRow,
+        "user_id" | "type" | "amount" | "balance_after"
+      >;
+      usage_logs: Table<UsageLogRow, "user_id" | "feature_key">;
+      usage_counters: Table<
+        UsageCounterRow,
+        "user_id" | "feature_key" | "period_start"
+      >;
+      notifications: Table<NotificationRow, "user_id" | "title">;
+      audit_logs: Table<AuditLogRow, "action">;
+    };
+    Views: Record<string, never>;
+    Functions: {
+      get_entitlements: {
+        // Always passed explicitly by the server; the SQL default exists for
+        // manual use in the Supabase SQL editor.
+        Args: { p_user_id: string };
+        Returns: Json;
+      };
+      consume_credits: {
+        Args: {
+          p_user_id: string;
+          p_feature_key: string;
+          p_credits: number;
+          p_reason?: string | null;
+          p_idempotency_key?: string | null;
+          p_reference_type?: string | null;
+          p_reference_id?: string | null;
+          p_metadata?: Json;
+        };
+        Returns: Json;
+      };
+      grant_credits: {
+        Args: {
+          p_user_id: string;
+          p_credits: number;
+          p_type?: CreditTransactionType;
+          p_reason?: string | null;
+          p_idempotency_key?: string | null;
+          p_reference_type?: string | null;
+          p_reference_id?: string | null;
+          p_metadata?: Json;
+        };
+        Returns: Json;
+      };
+      refund_credits: {
+        Args: { p_user_id: string; p_transaction_id: string; p_reason?: string };
+        Returns: Json;
+      };
+      log_feature_usage: {
+        Args: {
+          p_user_id: string;
+          p_feature_key: string;
+          p_status?: UsageStatus;
+          p_credits?: number;
+          p_words?: number;
+          p_characters?: number;
+          p_duration_ms?: number | null;
+          p_provider?: string | null;
+          p_model?: string | null;
+          p_error_code?: string | null;
+          p_error_message?: string | null;
+          p_reference_type?: string | null;
+          p_reference_id?: string | null;
+          p_metadata?: Json;
+        };
+        Returns: string;
+      };
+      assign_plan: {
+        Args: {
+          p_user_id: string;
+          p_plan_key: string;
+          p_interval?: BillingInterval;
+          p_status?: SubscriptionStatus;
+          p_period_end?: string | null;
+        };
+        Returns: string;
+      };
+      provision_user: { Args: { p_user_id: string }; Returns: undefined };
+      renew_credit_period: { Args: { p_user_id: string }; Returns: Json };
+      is_admin: { Args: { p_user_id: string }; Returns: boolean };
+      is_educator: { Args: { p_user_id: string }; Returns: boolean };
+      has_role: { Args: { p_user_id: string; p_role: AppRole }; Returns: boolean };
+    };
+    Enums: {
+      app_role: AppRole;
+      user_type: UserType;
+      subscription_status: SubscriptionStatus;
+      billing_interval: BillingInterval;
+      credit_transaction_type: CreditTransactionType;
+      usage_status: UsageStatus;
+    };
+    CompositeTypes: Record<string, never>;
+  };
+};

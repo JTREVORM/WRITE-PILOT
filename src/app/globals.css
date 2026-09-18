@@ -1,0 +1,200 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   WritePilot design tokens
+   --------------------------------------------------------------------------
+   Modern, intelligent, academic, professional, trustworthy. The palette is
+   deliberately restrained: one confident brand hue, a warm-leaning neutral
+   ramp, and semantic colours reserved for meaning rather than decoration.
+
+   Everything is expressed in oklch so that lightness steps are perceptually
+   even and the dark theme can be derived rather than hand-tuned.
+   ========================================================================== */
+
+@theme {
+  /* Brand — a deep, considered indigo. Confident without being loud. */
+  --color-brand-50: oklch(0.971 0.014 268);
+  --color-brand-100: oklch(0.939 0.031 268);
+  --color-brand-200: oklch(0.885 0.057 268);
+  --color-brand-300: oklch(0.812 0.093 267);
+  --color-brand-400: oklch(0.716 0.138 266);
+  --color-brand-500: oklch(0.625 0.178 265);
+  --color-brand-600: oklch(0.548 0.199 264);
+  --color-brand-700: oklch(0.478 0.183 264);
+  --color-brand-800: oklch(0.412 0.152 264);
+  --color-brand-900: oklch(0.362 0.121 265);
+  --color-brand-950: oklch(0.257 0.083 266);
+
+  /* Accent — a muted teal used sparingly for positive/analytical signals. */
+  --color-accent-400: oklch(0.782 0.106 197);
+  --color-accent-500: oklch(0.704 0.114 197);
+  --color-accent-600: oklch(0.606 0.104 198);
+  --color-accent-700: oklch(0.512 0.087 199);
+
+  /* Neutrals — very slightly warm, which reads as paper rather than steel. */
+  --color-ink-50: oklch(0.985 0.002 264);
+  --color-ink-100: oklch(0.967 0.003 264);
+  --color-ink-200: oklch(0.928 0.006 264);
+  --color-ink-300: oklch(0.872 0.008 264);
+  --color-ink-400: oklch(0.708 0.012 264);
+  --color-ink-500: oklch(0.556 0.013 264);
+  --color-ink-600: oklch(0.446 0.013 264);
+  --color-ink-700: oklch(0.373 0.012 264);
+  --color-ink-800: oklch(0.279 0.011 264);
+  --color-ink-900: oklch(0.21 0.01 264);
+  --color-ink-950: oklch(0.141 0.008 264);
+
+  --color-success-50: oklch(0.962 0.031 158);
+  --color-success-500: oklch(0.646 0.142 158);
+  --color-success-600: oklch(0.563 0.128 158);
+  --color-success-700: oklch(0.474 0.109 158);
+
+  --color-warning-50: oklch(0.973 0.043 85);
+  --color-warning-500: oklch(0.746 0.152 71);
+  --color-warning-600: oklch(0.666 0.148 62);
+  --color-warning-700: oklch(0.558 0.129 58);
+
+  --color-danger-50: oklch(0.963 0.024 17);
+  --color-danger-500: oklch(0.629 0.208 26);
+  --color-danger-600: oklch(0.557 0.204 27);
+  --color-danger-700: oklch(0.481 0.18 27);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-serif-display), ui-serif, Georgia, serif;
+
+  /* Slightly tighter than Tailwind's default for a denser, more tool-like UI. */
+  --radius-card: 0.75rem;
+
+  --shadow-subtle: 0 1px 2px 0 oklch(0.141 0.008 264 / 0.05);
+  --shadow-card: 0 1px 3px 0 oklch(0.141 0.008 264 / 0.07),
+    0 1px 2px -1px oklch(0.141 0.008 264 / 0.06);
+  --shadow-raised: 0 4px 12px -2px oklch(0.141 0.008 264 / 0.09),
+    0 2px 6px -2px oklch(0.141 0.008 264 / 0.06);
+
+  --animate-fade-in: fade-in 0.25s ease-out;
+  --animate-rise: rise 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Semantic surface tokens
+   --------------------------------------------------------------------------
+   Components reference these rather than palette steps, so the dark theme is a
+   single block of overrides instead of a `dark:` variant on every element.
+   -------------------------------------------------------------------------- */
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-surface-raised: var(--surface-raised);
+  --color-foreground: var(--foreground);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-foreground-subtle: var(--foreground-subtle);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+}
+
+:root {
+  --canvas: var(--color-ink-50);
+  --surface: #ffffff;
+  --surface-muted: var(--color-ink-100);
+  --surface-raised: #ffffff;
+  --foreground: var(--color-ink-900);
+  --foreground-muted: var(--color-ink-600);
+  --foreground-subtle: var(--color-ink-500);
+  --line: var(--color-ink-200);
+  --line-strong: var(--color-ink-300);
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --canvas: var(--color-ink-950);
+    --surface: oklch(0.183 0.009 264);
+    --surface-muted: oklch(0.223 0.01 264);
+    --surface-raised: oklch(0.235 0.011 264);
+    --foreground: var(--color-ink-100);
+    --foreground-muted: oklch(0.72 0.012 264);
+    --foreground-subtle: oklch(0.62 0.013 264);
+    --line: oklch(0.285 0.011 264);
+    --line-strong: oklch(0.34 0.012 264);
+
+    color-scheme: dark;
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    /* Anchor links and scroll-to sections clear the sticky header. */
+    scroll-padding-top: 5rem;
+  }
+
+  body {
+    background-color: var(--canvas);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    text-wrap: balance;
+    letter-spacing: -0.02em;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  /* A single, consistent focus treatment. Never removed — only restyled. */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+    border-radius: 0.25rem;
+  }
+
+  ::selection {
+    background-color: var(--color-brand-200);
+    color: var(--color-brand-950);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
