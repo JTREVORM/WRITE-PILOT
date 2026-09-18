@@ -50,10 +50,10 @@ export const navigation: NavSection[] = [
     items: [
       {
         label: "AI Detector",
-        href: "/tools/ai-detector",
+        href: routes.aiDetector,
         icon: "detector",
         description: "Estimate how likely a text is AI-generated",
-        available: false,
+        available: true,
       },
       {
         label: "Grammar Checker",
@@ -136,10 +136,10 @@ export const navigation: NavSection[] = [
 export const quickActions: NavItem[] = [
   {
     label: "AI Detector",
-    href: "/tools/ai-detector",
+    href: routes.aiDetector,
     icon: "detector",
     description: "Check estimated AI likelihood",
-    available: false,
+    available: true,
   },
   {
     label: "Check Grammar",

@@ -117,6 +117,54 @@
    single block of overrides instead of a `dark:` variant on every element.
    -------------------------------------------------------------------------- */
 
+/* --------------------------------------------------------------------------
+   Detection severity ramp
+   --------------------------------------------------------------------------
+   Four ordered states for the AI-likelihood meter, plus a lighter step of the
+   same hue for the unfilled track so the state reads across the whole bar.
+
+   Only one state is ever shown at a time, always beside an icon and a written
+   label, so these never have to be told apart from one another by hue. The
+   steps are selected per mode rather than flipped: the light amber sits below
+   3:1 on a light surface (mitigated by the label), and the dark steps are
+   chosen to sit inside the dark-surface lightness band.
+   -------------------------------------------------------------------------- */
+
+:root {
+  --detect-low: var(--color-success-500);
+  --detect-low-track: var(--color-success-50);
+  --detect-moderate: var(--color-brand-500);
+  --detect-moderate-track: var(--color-brand-100);
+  --detect-elevated: var(--color-warning-500);
+  --detect-elevated-track: var(--color-warning-50);
+  --detect-high: var(--color-danger-500);
+  --detect-high-track: var(--color-danger-50);
+}
+
+:root[data-theme="dark"] {
+  --detect-low: var(--color-success-500);
+  --detect-low-track: oklch(0.646 0.142 158 / 0.18);
+  --detect-moderate: var(--color-brand-400);
+  --detect-moderate-track: oklch(0.716 0.138 266 / 0.18);
+  --detect-elevated: var(--color-warning-600);
+  --detect-elevated-track: oklch(0.666 0.148 62 / 0.2);
+  --detect-high: var(--color-danger-500);
+  --detect-high-track: oklch(0.629 0.208 26 / 0.18);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --detect-low: var(--color-success-500);
+    --detect-low-track: oklch(0.646 0.142 158 / 0.18);
+    --detect-moderate: var(--color-brand-400);
+    --detect-moderate-track: oklch(0.716 0.138 266 / 0.18);
+    --detect-elevated: var(--color-warning-600);
+    --detect-elevated-track: oklch(0.666 0.148 62 / 0.2);
+    --detect-high: var(--color-danger-500);
+    --detect-high-track: oklch(0.629 0.208 26 / 0.18);
+  }
+}
+
 @theme inline {
   --color-canvas: var(--canvas);
   --color-surface: var(--surface);
@@ -127,6 +175,15 @@
   --color-foreground-subtle: var(--foreground-subtle);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
+
+  --color-detect-low: var(--detect-low);
+  --color-detect-low-track: var(--detect-low-track);
+  --color-detect-moderate: var(--detect-moderate);
+  --color-detect-moderate-track: var(--detect-moderate-track);
+  --color-detect-elevated: var(--detect-elevated);
+  --color-detect-elevated-track: var(--detect-elevated-track);
+  --color-detect-high: var(--detect-high);
+  --color-detect-high-track: var(--detect-high-track);
 }
 
 :root {

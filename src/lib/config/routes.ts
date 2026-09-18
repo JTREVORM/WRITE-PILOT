@@ -21,6 +21,7 @@ export const routes = {
   authError: "/auth/auth-code-error",
 
   dashboard: "/dashboard",
+  aiDetector: "/tools/ai-detector",
   documents: "/documents",
   usage: "/usage",
   billing: "/billing",
@@ -33,6 +34,7 @@ export const routes = {
 /** Prefixes that require an authenticated session. */
 const PROTECTED_PREFIXES = [
   routes.dashboard,
+  "/tools",
   routes.documents,
   routes.usage,
   routes.billing,

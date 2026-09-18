@@ -12,6 +12,16 @@ const nextConfig: NextConfig = {
   // Trims the response and removes a needless fingerprint of the stack.
   poweredByHeader: false,
 
+  experimental: {
+    serverActions: {
+      // Document uploads go through a Server Action, and the default cap is
+      // 1 MB. This is the outer bound for any plan; the per-plan limit is
+      // enforced against the user's entitlements once the file arrives, so a
+      // free-plan user still cannot store a 50 MB document.
+      bodySizeLimit: "52mb",
+    },
+  },
+
   async headers() {
     return [
       {

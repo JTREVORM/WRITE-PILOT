@@ -10,14 +10,15 @@ professionals worldwide.
 
 ## Where the project stands
 
-**Phases 1 and 2 are complete.** Authentication, profiles, roles, plans,
+**Phases 1–3 are complete.** Authentication, profiles, roles, plans,
 subscriptions, the credit ledger, usage tracking and Row Level Security (Phase
 1); the streaming dashboard, notification centre, theme control and the rest of
-the application shell (Phase 2).
+the application shell (Phase 2); the AI Detector, the provider layer and
+document text extraction (Phase 3).
 
-The AI tools themselves — detector, grammar, naturalize, grader, citations —
-arrive in later phases. They are visible in the navigation marked "Soon" rather
-than linking to routes that do not exist.
+The remaining tools — grammar, naturalize, grader, citations — arrive in later
+phases. They are visible in the navigation marked "Soon" rather than linking to
+routes that do not exist.
 
 ## Stack
 
@@ -27,6 +28,7 @@ than linking to routes that do not exist.
 | Language | TypeScript, strict |
 | Styling | Tailwind CSS v4, CSS-first tokens |
 | Database & auth | Supabase (Postgres, Auth, Storage, RLS) |
+| AI | Anthropic (swappable — see the provider layer below) |
 | Email | Resend (transactional); Supabase Auth sends account mail |
 | Hosting | Vercel-ready |
 
@@ -84,10 +86,14 @@ src/
     layout/            App shell, sidebar, mobile drawer, notifications, theme
     auth/              Forms bound to server actions
     dashboard/         Streamed sections, stat cards, quick actions, setup notice
+    detection/         Likelihood meter, paragraph view, signals, scan form
   lib/
     env/               Zod-validated environment, split public vs server-only
     theme/             Theme preference: cookie, server read, server action
     notifications/     In-app notification reads and mutations
+    ai/                Provider contract and the Anthropic implementation
+    detection/         AI Detector: signals, scoring, prompt, orchestration
+    documents/         Upload text extraction (PDF, DOCX, TXT)
     supabase/          Browser, server, proxy and service-role clients
     auth/              Sessions, role guards, server actions, provisioning
     entitlements/      Plan and credit policy — the gate before every AI call
@@ -143,6 +149,54 @@ Two constraints are easy to break here and worth knowing:
   header, which uses a backdrop blur — and an element with a backdrop filter
   becomes the containing block for its `position: fixed` descendants. Rendered in
   place, the drawer is clipped to the height of the header bar.
+
+### The AI provider layer
+
+`lib/ai` exposes one capability — "given a prompt and a schema, return data
+matching that schema" — rather than a method per product feature. Each feature
+owns its prompt and its response schema; the provider only knows how to talk to
+a model. Swapping providers means adding a class beside the existing one and a
+branch in `provider.ts`, with no feature code touched.
+
+Responses are validated against a Zod schema on the way out, so nothing
+downstream defends against a half-parsed result.
+
+### How the AI Detector works
+
+The result has two independent parts, which is what makes it explainable:
+
+- **Measured signals** are computed locally from the text — sentence-length
+  variation, lexical diversity, repeated four-word sequences, punctuation range,
+  connective density. No model is involved, so they are reproducible, and they
+  are shown to the user as observations about the writing.
+- **The estimate** comes from the model, which is given those same measurements
+  as evidence rather than being asked to judge blind.
+
+Every AI feature follows the same order, and the detector is the reference
+implementation:
+
+1. check the input is worth analysing
+2. check the entitlement — refuse before spending anything
+3. resolve the provider — refuse before charging if it is unavailable
+4. charge credits, idempotently
+5. call the provider; on any failure, refund and record it
+6. persist the result and record the success
+
+Credits are charged *before* the provider call so two concurrent requests cannot
+both pass a balance check and overspend. The refund path is what makes that
+safe: a user is never billed for analysis they did not receive.
+
+**The model is never asked for character offsets.** It scores numbered
+paragraphs; the offsets are computed server-side from the same split that
+produced the numbering. That keeps every highlight on the passage it describes
+instead of trusting a model to count characters.
+
+**On honesty.** No band is labelled "AI-generated" — the strongest is "strong
+indicators", which is what the measurement can support. Confidence is reported
+from the amount of text available, the false-positive disclaimer appears beside
+every result rather than behind a link, and the prompt explicitly instructs
+against penalising non-native English writers. These are covered by tests, not
+just convention.
 
 ### Theme
 
@@ -202,8 +256,9 @@ across every surface.
 | --- | --- | --- |
 | 1 | Foundation: auth, profiles, plans, credits, usage, RLS, shell | **Complete** |
 | 2 | Dashboard and application shell | **Complete** |
-| 3 | AI Detector | Next |
-| 4–7 | Grammar, Naturalize, AI Grader, Citations | Planned |
+| 3 | AI Detector | **Complete** |
+| 4 | Grammar Checker | Next |
+| 5–7 | Naturalize, AI Grader, Citations | Planned |
 | 8 | Document and assignment workspaces | Planned |
 | 9 | Writing Coach and priority improvements | Planned |
 | 10 | Subscriptions, payments, plan enforcement | Planned |
@@ -224,3 +279,7 @@ See `.env.example` for the full list with notes. Secrets are never committed;
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | **Secret.** Bypasses RLS. Server-side only |
 | `RESEND_API_KEY` | No | Without it, notification email is skipped, not failed |
 | `RESEND_FROM_EMAIL` | No | Verified sender address |
+| `ANTHROPIC_API_KEY` | No | **Secret.** Without it, AI tools report as unavailable and charge nothing |
+| `AI_PROVIDER` | No | Defaults to `anthropic` |
+| `AI_MODEL` | No | Defaults to `claude-opus-5`; changeable without a deploy |
+| `AI_TIMEOUT_MS` | No | Upper bound on one analysis (default 120000) |

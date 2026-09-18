@@ -261,6 +261,73 @@ function check(condition, passed, failed) {
   await ctx.close();
 }
 
+// --- detection scan form gating ----------------------------------------------
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto(`${BASE_URL}${process.env.DETECTION_PATH ?? "/shell-preview/detection"}`, {
+    waitUntil: "networkidle",
+  });
+
+  const submit = page.locator('button[type="submit"]');
+  const textarea = page.locator('textarea[name="text"]');
+
+  check(
+    await submit.isDisabled(),
+    "scan submit starts disabled with no input",
+  );
+
+  // Under the 50-word minimum: still refused, and the shortfall is named.
+  await textarea.fill("Too short to analyse meaningfully.");
+  await page.waitForTimeout(200);
+  check(
+    await submit.isDisabled(),
+    "scan submit stays disabled below the word minimum",
+  );
+  const shortNotice = await page.locator("form").innerText();
+  check(
+    /needed/i.test(shortNotice),
+    "the form says how many more words are needed",
+  );
+
+  // Comfortably over the minimum: enabled.
+  await textarea.fill(("sentence number one here ").repeat(30));
+  await page.waitForTimeout(200);
+  check(
+    await submit.isEnabled(),
+    "scan submit enables once the text is long enough",
+  );
+
+  // Over the plan's per-run word cap: refused again.
+  await textarea.fill(("word ").repeat(2000));
+  await page.waitForTimeout(250);
+  check(
+    await submit.isDisabled(),
+    "scan submit disables when the text exceeds the plan word limit",
+  );
+  check(
+    /over your plan limit/i.test(await page.locator("form").innerText()),
+    "the form explains that the text is over the plan limit",
+  );
+
+  check(
+    (await page.locator('[role="meter"]').count()) > 0,
+    "the likelihood meter renders with a meter role",
+  );
+  check(
+    /not proof of authorship/i.test(await page.locator("body").innerText()),
+    "the false-positive disclaimer is present on the result view",
+  );
+
+  check(errors.length === 0, "no uncaught client errors on the detection view",
+    `client errors: ${errors.slice(0, 2).join(" | ")}`);
+
+  await page.screenshot({ path: `${SHOT_DIR}/detection-form.png` });
+  await ctx.close();
+}
+
 await browser.close();
 console.log(failures === 0 ? "\nInteraction checks passed." : `\n${failures} failed.`);
 process.exit(failures === 0 ? 0 : 1);

@@ -632,7 +632,125 @@ begin
 end $$;
 
 -- =============================================================================
-\echo '== 8. Cleanup =============================================================='
+\echo '== 8. AI detection scans ==================================================='
+-- =============================================================================
+-- These rows hold the user's own unpublished writing, so the isolation matters
+-- more here than anywhere else in the schema.
+
+do $$
+declare
+  v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+  v_bob   uuid := (select id from wp_test.fixtures where name = 'bob');
+  v_scan  uuid;
+begin
+  insert into public.ai_scans (
+    user_id, title, source, content, word_count, character_count,
+    estimated_ai_likelihood, confidence, summary, provider, model, credits_charged
+  )
+  values (
+    v_alice, 'Dissertation chapter 3', 'docx',
+    E'First paragraph of the draft.\n\nSecond paragraph of the draft.',
+    10, 62, 42, 'medium', 'Mixed signals.', 'test', 'test-model', 2
+  )
+  returning id into v_scan;
+
+  insert into public.ai_scan_segments
+    (scan_id, position, start_offset, end_offset, estimated_ai_likelihood, rationale)
+  values
+    (v_scan, 0, 0, 29, 20, 'Varied sentence rhythm.'),
+    (v_scan, 1, 31, 61, 64, 'Uniform phrasing.');
+
+  insert into public.ai_scans (
+    user_id, title, source, content, word_count, character_count,
+    estimated_ai_likelihood, confidence
+  )
+  values (v_bob, 'Bob''s essay', 'text', 'Bob wrote this himself.', 4, 23, 12, 'low');
+
+  perform wp_test.assert_eq(
+    (select count(*)::int from public.ai_scans), 2, 'scans are stored'
+  );
+  perform wp_test.assert_eq(
+    (select count(*)::int from public.ai_scan_segments where scan_id = v_scan),
+    2, 'paragraph segments are stored'
+  );
+end $$;
+
+begin;
+  set local role authenticated;
+  set local request.jwt.claim.role = 'authenticated';
+
+  do $$
+  declare v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+  begin
+    execute format('set local request.jwt.claim.sub = %L', v_alice);
+
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.ai_scans), 1,
+      'a user sees only their own scans'
+    );
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.ai_scan_segments), 2,
+      'segment visibility follows the parent scan'
+    );
+    perform wp_test.assert(
+      not exists (
+        select 1 from public.ai_scans where content like '%Bob wrote this%'
+      ),
+      'a user cannot read another user''s document text'
+    );
+  end $$;
+
+  select wp_test.assert_denied(
+    $q$insert into public.ai_scans
+         (user_id, title, content, word_count, character_count, estimated_ai_likelihood)
+       select id, 'Forged', 'x', 1, 1, 0 from wp_test.fixtures where name = 'alice'$q$,
+    'a user cannot create a scan directly');
+  select wp_test.assert_denied(
+    'update public.ai_scans set estimated_ai_likelihood = 0',
+    'a user cannot rewrite a scan result');
+  select wp_test.assert_denied(
+    'delete from public.ai_scan_segments',
+    'a user cannot delete segments independently of their scan');
+commit;
+
+-- Deletion is the one write a user must be able to perform: it is how the
+-- privacy promise is kept.
+begin;
+  set local role authenticated;
+  set local request.jwt.claim.role = 'authenticated';
+
+  do $$
+  declare
+    v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+    v_scan  uuid;
+  begin
+    execute format('set local request.jwt.claim.sub = %L', v_alice);
+
+    select id into v_scan from public.ai_scans limit 1;
+    delete from public.ai_scans where id = v_scan;
+
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.ai_scans), 0,
+      'a user can delete their own scan'
+    );
+  end $$;
+commit;
+
+do $$
+declare v_bob uuid := (select id from wp_test.fixtures where name = 'bob');
+begin
+  perform wp_test.assert_eq(
+    (select count(*)::int from public.ai_scan_segments), 0,
+    'deleting a scan cascades to its segments'
+  );
+  perform wp_test.assert_eq(
+    (select count(*)::int from public.ai_scans where user_id = v_bob), 1,
+    'another user''s scans are untouched'
+  );
+end $$;
+
+-- =============================================================================
+\echo '== 9. Cleanup =============================================================='
 -- =============================================================================
 
 do $$ begin

@@ -17,6 +17,7 @@ nor its own UI code for those decisions.
 | `migrations/20250101000500_rls.sql` | Grants and every RLS policy |
 | `migrations/20250101000600_seed_catalog.sql` | Starting plans, features, limits and credit packs |
 | `migrations/20250102000000_notifications_guard.sql` | Column guard for user-visible notification updates |
+| `migrations/20250103000000_ai_scans.sql` | `ai_scans`, `ai_scan_segments` and their policies |
 | `tests/database.test.sql` | Behavioural tests, including the RLS denial cases |
 
 ## Applying it
@@ -57,6 +58,8 @@ suite cleans up after itself and can be re-run. It covers:
 - plan changes and entitlement recalculation
 - notification reads, marking as read, and the column guard that stops a user
   rewriting a notification's text
+- detection scans: owner-only reads, no client writes, user-initiated deletion,
+  and the cascade from a scan to its paragraph segments
 - **Row Level Security**: that a user cannot read another user's data, cannot
   raise their own credit balance, cannot grant themselves a role, cannot change
   their own plan, and cannot execute any privileged function
@@ -80,6 +83,12 @@ the outcome a user would choose.
 columns, so a table a user may update needs a trigger to pin the fields they
 must not change — the profile's identity columns, and everything on a
 notification except its read state.
+
+**Document text is owner-only, with no admin read path.** `ai_scans` stores the
+text that was analysed, because a likelihood with no way to see which paragraphs
+drove it is not actionable. Administering the platform does not require reading
+customers' unpublished writing, so that access simply does not exist — and the
+owner can delete a scan at any time.
 
 **Roles are not in the JWT.** They live in `user_roles` and are read per request,
 so revoking an admin takes effect immediately rather than at the next token

@@ -26,6 +26,17 @@ const serverEnvSchema = z.object({
   RESEND_API_KEY: z.string().min(1).optional(),
   RESEND_FROM_EMAIL: z.string().email().optional(),
   RESEND_REPLY_TO_EMAIL: z.string().email().optional(),
+
+  /**
+   * AI provider. Optional so the application boots, and every AI feature
+   * reports itself as unavailable, rather than crashing when no key is set.
+   */
+  AI_PROVIDER: z.enum(["anthropic"]).default("anthropic"),
+  ANTHROPIC_API_KEY: z.string().min(1).optional(),
+  /** Overridable so a model can be changed without a deploy. */
+  AI_MODEL: z.string().min(1).default("claude-opus-5"),
+  /** Upper bound on a single analysis, in milliseconds. */
+  AI_TIMEOUT_MS: z.coerce.number().int().positive().max(600_000).default(120_000),
 });
 
 const parsed = serverEnvSchema.safeParse(process.env);
@@ -49,3 +60,6 @@ export const isEmailConfigured = Boolean(
 );
 
 export const isProduction = serverEnv.NODE_ENV === "production";
+
+/** True when AI features can actually run. */
+export const isAiConfigured = Boolean(serverEnv.ANTHROPIC_API_KEY);

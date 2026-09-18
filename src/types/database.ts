@@ -47,6 +47,10 @@ export type CreditTransactionType =
 
 export type UsageStatus = "success" | "failure" | "rejected";
 
+export type ScanSource = "text" | "pdf" | "docx" | "txt";
+
+export type DetectionConfidence = "low" | "medium" | "high";
+
 /** Feature keys seeded in 0007. New keys are a data change, not a type change. */
 export type FeatureKey =
   | "grammar_check"
@@ -225,6 +229,37 @@ export type UsageCounterRow = {
   updated_at: string;
 };
 
+export type AiScanRow = {
+  id: string;
+  user_id: string;
+  title: string;
+  source: ScanSource;
+  source_filename: string | null;
+  content: string;
+  word_count: number;
+  character_count: number;
+  estimated_ai_likelihood: number;
+  confidence: DetectionConfidence;
+  summary: string | null;
+  signals: Json;
+  provider: string | null;
+  model: string | null;
+  duration_ms: number | null;
+  credits_charged: number;
+  credit_transaction_id: string | null;
+  created_at: string;
+};
+
+export type AiScanSegmentRow = {
+  id: string;
+  scan_id: string;
+  position: number;
+  start_offset: number;
+  end_offset: number;
+  estimated_ai_likelihood: number;
+  rationale: string | null;
+};
+
 export type NotificationRow = {
   id: string;
   user_id: string;
@@ -285,6 +320,23 @@ export type Database = {
       >;
       notifications: Table<NotificationRow, "user_id" | "title">;
       audit_logs: Table<AuditLogRow, "action">;
+      ai_scans: Table<
+        AiScanRow,
+        | "user_id"
+        | "title"
+        | "content"
+        | "word_count"
+        | "character_count"
+        | "estimated_ai_likelihood"
+      >;
+      ai_scan_segments: Table<
+        AiScanSegmentRow,
+        | "scan_id"
+        | "position"
+        | "start_offset"
+        | "end_offset"
+        | "estimated_ai_likelihood"
+      >;
     };
     Views: Record<string, never>;
     Functions: {
@@ -366,6 +418,8 @@ export type Database = {
       billing_interval: BillingInterval;
       credit_transaction_type: CreditTransactionType;
       usage_status: UsageStatus;
+      scan_source: ScanSource;
+      detection_confidence: DetectionConfidence;
     };
     CompositeTypes: Record<string, never>;
   };
