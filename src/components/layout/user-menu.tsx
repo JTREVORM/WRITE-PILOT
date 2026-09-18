@@ -13,7 +13,11 @@ export interface UserMenuProps {
   name: string | null;
   email: string;
   avatarUrl: string | null;
-  planName: string | null;
+  /**
+   * Optional: the shell streams entitlements separately, so this is usually
+   * null there. Present when a caller already has the plan to hand.
+   */
+  planName?: string | null;
 }
 
 /**
@@ -23,7 +27,12 @@ export interface UserMenuProps {
  * closes on Escape, on outside click and on blur out of the menu, which covers
  * keyboard and pointer users without shipping another runtime.
  */
-export function UserMenu({ name, email, avatarUrl, planName }: UserMenuProps) {
+export function UserMenu({
+  name,
+  email,
+  avatarUrl,
+  planName = null,
+}: UserMenuProps) {
   const [open, setOpen] = useState(false);
   const [isSigningOut, startSignOut] = useTransition();
   const containerRef = useRef<HTMLDivElement>(null);

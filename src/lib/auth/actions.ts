@@ -276,6 +276,50 @@ export async function updatePasswordAction(
   redirect(routes.dashboard);
 }
 
+/**
+ * Re-sends the signup confirmation email.
+ *
+ * Offered from the dashboard when an account is still unconfirmed. Like the
+ * reset flow, the response says the same thing whether or not there was
+ * anything to send.
+ */
+export async function resendVerificationAction(): Promise<ActionResult<null>> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user?.email) {
+    return fail("Please sign in to continue.", { code: "not_authenticated" });
+  }
+
+  if (user.email_confirmed_at) {
+    return ok(null);
+  }
+
+  const { error } = await supabase.auth.resend({
+    type: "signup",
+    email: user.email,
+    options: {
+      emailRedirectTo: await absoluteUrl(
+        `${routes.authCallback}?next=${encodeURIComponent(routes.dashboard)}`,
+      ),
+    },
+  });
+
+  if (error?.status === 429) {
+    return fail("Too many requests. Please wait a minute and try again.", {
+      code: "rate_limited",
+    });
+  }
+
+  if (error) {
+    console.error("[auth] resend verification failed", error.message);
+  }
+
+  return ok(null);
+}
+
 // -----------------------------------------------------------------------------
 // Profile
 // -----------------------------------------------------------------------------

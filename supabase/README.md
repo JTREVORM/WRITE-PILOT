@@ -16,6 +16,7 @@ nor its own UI code for those decisions.
 | `migrations/20250101000400_functions.sql` | Provisioning, credit ledger, usage logging, entitlements |
 | `migrations/20250101000500_rls.sql` | Grants and every RLS policy |
 | `migrations/20250101000600_seed_catalog.sql` | Starting plans, features, limits and credit packs |
+| `migrations/20250102000000_notifications_guard.sql` | Column guard for user-visible notification updates |
 | `tests/database.test.sql` | Behavioural tests, including the RLS denial cases |
 
 ## Applying it
@@ -37,6 +38,12 @@ supabase db reset   # applies every migration, then the seed
 ## Running the tests
 
 ```bash
+npm run test:db      # rebuilds a scratch database, applies every migration, runs the suite
+```
+
+Or against any database directly:
+
+```bash
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/database.test.sql
 ```
 
@@ -48,6 +55,8 @@ suite cleans up after itself and can be re-run. It covers:
 - allowance credits being spent before purchased ones
 - usage logging and monthly counters, including that failures do not consume an allowance
 - plan changes and entitlement recalculation
+- notification reads, marking as read, and the column guard that stops a user
+  rewriting a notification's text
 - **Row Level Security**: that a user cannot read another user's data, cannot
   raise their own credit balance, cannot grant themselves a role, cannot change
   their own plan, and cannot execute any privileged function
@@ -66,6 +75,11 @@ balance that resulted. Both are written inside one transaction by
 **Allowance is spent before purchased credits.** Plan credits expire at the
 period rollover; purchased credits do not. Spending the perishable ones first is
 the outcome a user would choose.
+
+**Columns RLS cannot protect are guarded by triggers.** RLS filters rows, not
+columns, so a table a user may update needs a trigger to pin the fields they
+must not change — the profile's identity columns, and everything on a
+notification except its read state.
 
 **Roles are not in the JWT.** They live in `user_roles` and are read per request,
 so revoking an admin takes effect immediately rather than at the next token

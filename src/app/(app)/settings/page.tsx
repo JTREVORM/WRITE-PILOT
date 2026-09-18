@@ -14,7 +14,7 @@ import { getCurrentRoles } from "@/lib/auth/guards";
 import { formatDate } from "@/lib/utils/format";
 
 export const metadata: Metadata = {
-  title: "Settings",
+  title: "Profile",
   robots: { index: false, follow: false },
 };
 
@@ -24,19 +24,12 @@ const ROLE_LABELS: Record<string, string> = {
   admin: "Administrator",
 };
 
-export default async function SettingsPage() {
+export default async function SettingsProfilePage() {
   const { profile } = await requireProfile();
   const roles = await getCurrentRoles();
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="text-sm text-foreground-muted">
-          Manage how WritePilot knows you.
-        </p>
-      </header>
-
+    <>
       <Card>
         <CardHeader>
           <CardTitle as="h2">Profile</CardTitle>
@@ -74,6 +67,6 @@ export default async function SettingsPage() {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </>
   );
 }

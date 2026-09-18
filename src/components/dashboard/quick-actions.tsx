@@ -1,9 +1,10 @@
 import Link from "next/link";
 
 import { Card } from "@/components/ui/card";
+import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils/cn";
 import { quickActions } from "@/lib/config/navigation";
-import type { Entitlements } from "@/lib/entitlements/types";
+import { getEntitlementsSafe } from "@/lib/entitlements/service";
 
 /**
  * The six things a user most often wants to start.
@@ -13,7 +14,9 @@ import type { Entitlements } from "@/lib/entitlements/types";
  * the card says so and points at the upgrade — the entitlement data is already
  * loaded for the page, so this costs nothing extra.
  */
-export function QuickActions({ entitlements }: { entitlements: Entitlements }) {
+export async function QuickActions({ userId }: { userId: string }) {
+  const entitlements = await getEntitlementsSafe(userId);
+
   return (
     <section aria-labelledby="quick-actions-heading">
       <h2
@@ -25,7 +28,6 @@ export function QuickActions({ entitlements }: { entitlements: Entitlements }) {
 
       <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {quickActions.map((action) => {
-          const Icon = action.icon;
           const inner = (
             <>
               <span
@@ -36,7 +38,7 @@ export function QuickActions({ entitlements }: { entitlements: Entitlements }) {
                     : "bg-surface-muted text-foreground-subtle",
                 )}
               >
-                <Icon className="size-4.5" aria-hidden="true" />
+                <Icon name={action.icon} className="size-4.5" />
               </span>
 
               <span className="min-w-0 flex-1">

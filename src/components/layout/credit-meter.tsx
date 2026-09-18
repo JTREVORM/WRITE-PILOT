@@ -1,18 +1,25 @@
 import Link from "next/link";
 
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import { routes } from "@/lib/config/routes";
 import { formatNumber } from "@/lib/utils/format";
-import type { Entitlements } from "@/lib/entitlements/types";
+import { getEntitlementsSafe } from "@/lib/entitlements/service";
 
 /**
- * Credit summary shown in the sidebar.
+ * Credit summary for the shell.
  *
- * Deliberately shows credits *remaining* rather than credits used: the number a
- * user needs before starting a task is how much they have left.
+ * Fetches its own data so it can sit behind a Suspense boundary: the navigation
+ * paints immediately and the meter fills in when the entitlement read resolves,
+ * rather than the whole shell waiting on it.
+ *
+ * Shows credits *remaining* rather than credits used — the number a user needs
+ * before starting a task is how much they have left.
  */
-export function CreditMeter({ entitlements }: { entitlements: Entitlements }) {
+export async function CreditMeter({ userId }: { userId: string }) {
+  const entitlements = await getEntitlementsSafe(userId);
   const { credits, plan } = entitlements;
+
   const allowance = credits.monthlyAllowance || plan?.monthlyCredits || 0;
   const used = Math.max(0, allowance - credits.allowanceBalance);
 
@@ -51,6 +58,20 @@ export function CreditMeter({ entitlements }: { entitlements: Entitlements }) {
           Details
         </Link>
       </div>
+    </div>
+  );
+}
+
+/** Fallback with the same footprint, so nothing shifts when the meter arrives. */
+export function CreditMeterFallback() {
+  return (
+    <div className="rounded-card border border-line bg-surface-muted/60 p-3.5">
+      <div className="flex items-baseline justify-between gap-2">
+        <Skeleton className="h-3 w-24" />
+        <Skeleton className="h-3.5 w-8" />
+      </div>
+      <Skeleton className="mt-3 h-1.5 w-full" />
+      <Skeleton className="mt-3 h-3 w-20" />
     </div>
   );
 }

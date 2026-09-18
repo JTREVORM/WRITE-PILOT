@@ -23,16 +23,7 @@ export default async function SecuritySettingsPage() {
   const { user } = await requireProfile();
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Account & security
-        </h1>
-        <p className="text-sm text-foreground-muted">
-          Your sign-in details and what happens to your data.
-        </p>
-      </header>
-
+    <>
       <Card>
         <CardHeader>
           <CardTitle as="h2">Sign-in</CardTitle>
@@ -85,6 +76,6 @@ export default async function SecuritySettingsPage() {
           </Alert>
         </CardContent>
       </Card>
-    </div>
+    </>
   );
 }

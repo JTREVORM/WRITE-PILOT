@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
 import { routes, safeRedirectPath } from "@/lib/config/routes";
+import { sendWelcomeIfFirstTime } from "@/lib/notifications/welcome";
 
 /**
  * PKCE code exchange.
@@ -38,6 +39,11 @@ export async function GET(request: NextRequest) {
     url.searchParams.set("reason", exchangeError.message);
     return NextResponse.redirect(url);
   }
+
+  // The session now exists, so this runs as the signed-in user and is scoped by
+  // RLS. It is once-per-account and never throws, so it cannot block the
+  // redirect that completes sign-in.
+  await sendWelcomeIfFirstTime();
 
   return NextResponse.redirect(new URL(next, origin));
 }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils/cn";
+import { Icon } from "@/components/ui/icon";
 import type { NavItem } from "@/lib/config/navigation";
 
 /**
@@ -25,8 +26,6 @@ export function NavLink({
     item.available &&
     (pathname === item.href || pathname.startsWith(`${item.href}/`));
 
-  const Icon = item.icon;
-
   const shared = cn(
     "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
   );
@@ -37,7 +36,7 @@ export function NavLink({
         className={cn(shared, "cursor-default text-foreground-subtle")}
         title={`${item.label} arrives in a later release`}
       >
-        <Icon className="size-4 shrink-0 opacity-60" aria-hidden="true" />
+        <Icon name={item.icon} className="size-4 shrink-0 opacity-60" />
         <span className="flex-1 truncate">{item.label}</span>
         <span className="rounded-full bg-surface-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide">
           Soon
@@ -59,11 +58,11 @@ export function NavLink({
       )}
     >
       <Icon
+        name={item.icon}
         className={cn(
           "size-4 shrink-0",
           isActive ? "text-brand-600 dark:text-brand-300" : "",
         )}
-        aria-hidden="true"
       />
       <span className="flex-1 truncate">{item.label}</span>
       {item.badge ? (

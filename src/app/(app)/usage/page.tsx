@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatCard } from "@/components/dashboard/stat-card";
+import { PageHeader } from "@/components/ui/page-header";
 import { requireUser } from "@/lib/auth/session";
 import { getEntitlements } from "@/lib/entitlements/service";
 import { createClient } from "@/lib/supabase/server";
@@ -57,13 +58,14 @@ export default async function UsagePage() {
 
   return (
     <div className="space-y-8">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Usage & credits</h1>
-        <p className="text-sm text-foreground-muted">
-          What you&apos;ve used this period, and every credit movement on your
-          account.
-        </p>
-      </header>
+      <PageHeader
+        title="Usage & credits"
+        description="What you've used this period, and every credit movement on your account."
+        breadcrumbs={[
+          { label: "Dashboard", href: routes.dashboard },
+          { label: "Usage & credits" },
+        ]}
+      />
 
       <section className="grid gap-4 sm:grid-cols-3">
         <StatCard

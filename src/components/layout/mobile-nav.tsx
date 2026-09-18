@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 
@@ -13,8 +14,14 @@ import type { NavSection } from "@/lib/config/navigation";
  * Navigation drawer for small screens.
  *
  * A purpose-built mobile layout rather than the desktop sidebar squeezed: it
- * opens over the content, locks background scroll, closes on Escape, on
- * backdrop tap and whenever the route changes.
+ * opens over the content, locks background scroll, and closes on Escape, on a
+ * backdrop tap, or on any navigation.
+ *
+ * The overlay is rendered into document.body through a portal. It has to be:
+ * the trigger lives in the sticky header, and that header uses a backdrop blur.
+ * An element with a backdrop-filter becomes the containing block for its
+ * `position: fixed` descendants, so an overlay rendered in place would be
+ * clipped to the height of the header bar instead of covering the viewport.
  */
 export function MobileNav({
   sections,
@@ -31,8 +38,6 @@ export function MobileNav({
   // render the drawer over the new page for a frame first.
   const [openedOn, setOpenedOn] = useState<string | null>(null);
   const open = openedOn !== null && openedOn === pathname;
-
-  const setOpen = (next: boolean) => setOpenedOn(next ? pathname : null);
 
   useEffect(() => {
     if (!open) return;
@@ -52,11 +57,49 @@ export function MobileNav({
     };
   }, [open]);
 
+  const overlay = (
+    <div className="fixed inset-0 z-50 lg:hidden">
+      <button
+        type="button"
+        aria-label="Close navigation menu"
+        onClick={() => setOpenedOn(null)}
+        className="absolute inset-0 animate-fade-in bg-ink-950/45 backdrop-blur-[2px]"
+      />
+
+      <div
+        className={cn(
+          "absolute inset-y-0 left-0 flex w-[min(19rem,85vw)] flex-col",
+          "animate-rise border-r border-line bg-surface shadow-raised",
+        )}
+      >
+        <div className="flex h-16 shrink-0 items-center justify-between border-b border-line px-4">
+          <Logo />
+          <button
+            type="button"
+            onClick={() => setOpenedOn(null)}
+            aria-label="Close navigation menu"
+            className="rounded-lg p-2 text-foreground-muted hover:bg-surface-muted"
+          >
+            <X className="size-5" aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-3 py-4">
+          <SidebarNav sections={sections} onNavigate={() => setOpenedOn(null)} />
+        </div>
+
+        {children ? (
+          <div className="shrink-0 border-t border-line p-3">{children}</div>
+        ) : null}
+      </div>
+    </div>
+  );
+
   return (
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => setOpenedOn(pathname)}
         aria-label="Open navigation menu"
         aria-expanded={open}
         className="-ml-1.5 rounded-lg p-2 text-foreground-muted hover:bg-surface-muted lg:hidden"
@@ -64,43 +107,9 @@ export function MobileNav({
         <Menu className="size-5" aria-hidden="true" />
       </button>
 
-      {open ? (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <button
-            type="button"
-            aria-label="Close navigation menu"
-            onClick={() => setOpen(false)}
-            className="absolute inset-0 bg-ink-950/45 backdrop-blur-[2px] animate-fade-in"
-          />
-
-          <div
-            className={cn(
-              "absolute inset-y-0 left-0 flex w-[min(19rem,85vw)] flex-col",
-              "border-r border-line bg-surface shadow-raised animate-rise",
-            )}
-          >
-            <div className="flex h-16 items-center justify-between border-b border-line px-4">
-              <Logo />
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                aria-label="Close navigation menu"
-                className="rounded-lg p-2 text-foreground-muted hover:bg-surface-muted"
-              >
-                <X className="size-5" aria-hidden="true" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-3 py-4">
-              <SidebarNav sections={sections} onNavigate={() => setOpen(false)} />
-            </div>
-
-            {children ? (
-              <div className="border-t border-line p-3">{children}</div>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
+      {/* `open` can only become true from a click, so document is always
+          available by the time this renders — no mount guard needed. */}
+      {open ? createPortal(overlay, document.body) : null}
     </>
   );
 }

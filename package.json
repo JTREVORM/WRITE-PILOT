@@ -9,11 +9,13 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
-    "test:db": "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f supabase/tests/database.test.sql",
+    "test:db": "bash scripts/db-test.sh",
     "verify": "npm run lint && npm run typecheck && npm run test && npm run build",
     "db:push": "supabase db push",
     "db:reset": "supabase db reset",
-    "db:types": "supabase gen types typescript --local > src/types/database.ts"
+    "db:types": "supabase gen types typescript --local > src/types/database.ts",
+    "test:responsive": "node scripts/responsive-check.mjs",
+    "test:interaction": "node scripts/interaction-check.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

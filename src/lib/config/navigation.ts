@@ -1,24 +1,14 @@
-import {
-  BarChart3,
-  BookMarked,
-  FileSearch,
-  FileText,
-  GraduationCap,
-  LayoutDashboard,
-  type LucideIcon,
-  Quote,
-  Settings,
-  ShieldCheck,
-  SpellCheck,
-  Sparkles,
-  Upload,
-} from "lucide-react";
-
 import { routes } from "./routes";
+import type { IconName } from "@/components/ui/icon";
 import type { AppRole } from "@/types/database";
 
 /**
  * Application navigation.
+ *
+ * Icons are referenced by name, not by component. This config is read by the
+ * server and handed to Client Components (the mobile drawer, the nav links),
+ * and a component reference cannot cross that boundary — everything here must
+ * stay plain, serializable data.
  *
  * Items carry an availability flag so the shell can present the full product
  * shape while only linking what actually exists. A tool that has not been built
@@ -30,7 +20,7 @@ import type { AppRole } from "@/types/database";
 export interface NavItem {
   label: string;
   href: string;
-  icon: LucideIcon;
+  icon: IconName;
   description?: string;
   /** false until the phase that implements it lands. */
   available: boolean;
@@ -49,7 +39,7 @@ export const navigation: NavSection[] = [
       {
         label: "Dashboard",
         href: routes.dashboard,
-        icon: LayoutDashboard,
+        icon: "dashboard",
         description: "Your plan, credits and recent activity",
         available: true,
       },
@@ -61,35 +51,35 @@ export const navigation: NavSection[] = [
       {
         label: "AI Detector",
         href: "/tools/ai-detector",
-        icon: FileSearch,
+        icon: "detector",
         description: "Estimate how likely a text is AI-generated",
         available: false,
       },
       {
         label: "Grammar Checker",
         href: "/tools/grammar",
-        icon: SpellCheck,
+        icon: "grammar",
         description: "Grammar, clarity and readability suggestions",
         available: false,
       },
       {
         label: "Naturalize",
         href: "/tools/naturalize",
-        icon: Sparkles,
+        icon: "naturalize",
         description: "Improve flow and readability, keep your meaning",
         available: false,
       },
       {
         label: "AI Grader",
         href: "/tools/grader",
-        icon: GraduationCap,
+        icon: "grader",
         description: "An estimated grade against a rubric",
         available: false,
       },
       {
         label: "Citation Checker",
         href: "/tools/citations",
-        icon: Quote,
+        icon: "citations",
         description: "Check citations against APA, MLA, Chicago or Harvard",
         available: false,
       },
@@ -101,14 +91,14 @@ export const navigation: NavSection[] = [
       {
         label: "Documents",
         href: routes.documents,
-        icon: FileText,
+        icon: "documents",
         description: "Your document library",
         available: false,
       },
       {
         label: "Assignments",
         href: "/assignments",
-        icon: BookMarked,
+        icon: "assignments",
         description: "Instructions, rubric, drafts and feedback in one place",
         available: false,
       },
@@ -120,21 +110,21 @@ export const navigation: NavSection[] = [
       {
         label: "Usage & credits",
         href: routes.usage,
-        icon: BarChart3,
+        icon: "usage",
         description: "What you've used and what's left",
         available: true,
       },
       {
         label: "Settings",
         href: routes.settings,
-        icon: Settings,
+        icon: "settings",
         description: "Profile and account preferences",
         available: true,
       },
       {
         label: "Admin",
         href: routes.admin,
-        icon: ShieldCheck,
+        icon: "security",
         available: false,
         requiresRole: "admin",
       },
@@ -147,42 +137,42 @@ export const quickActions: NavItem[] = [
   {
     label: "AI Detector",
     href: "/tools/ai-detector",
-    icon: FileSearch,
+    icon: "detector",
     description: "Check estimated AI likelihood",
     available: false,
   },
   {
     label: "Check Grammar",
     href: "/tools/grammar",
-    icon: SpellCheck,
+    icon: "grammar",
     description: "Fix grammar and clarity",
     available: false,
   },
   {
     label: "Naturalize",
     href: "/tools/naturalize",
-    icon: Sparkles,
+    icon: "naturalize",
     description: "Improve flow and readability",
     available: false,
   },
   {
     label: "Grade Assignment",
     href: "/tools/grader",
-    icon: GraduationCap,
+    icon: "grader",
     description: "Estimate a grade from a rubric",
     available: false,
   },
   {
     label: "Check Citations",
     href: "/tools/citations",
-    icon: Quote,
+    icon: "citations",
     description: "Validate references and style",
     available: false,
   },
   {
     label: "Upload Document",
     href: routes.documents,
-    icon: Upload,
+    icon: "upload",
     description: "Add a PDF, DOCX or TXT",
     available: false,
   },

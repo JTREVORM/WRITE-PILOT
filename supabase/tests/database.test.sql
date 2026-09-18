@@ -546,7 +546,93 @@ begin;
 commit;
 
 -- =============================================================================
-\echo '== 7. Cleanup =============================================================='
+\echo '== 7. Notifications ========================================================'
+-- =============================================================================
+
+do $$
+declare
+  v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+  v_bob   uuid := (select id from wp_test.fixtures where name = 'bob');
+begin
+  -- Written by the system through the service role, never by the client.
+  insert into public.notifications (user_id, type, title, body, action_url)
+  values
+    (v_alice, 'welcome', 'Welcome to WritePilot', 'Your credits are ready.', '/dashboard'),
+    (v_alice, 'low_credits', '4 credits remaining', 'Top up to keep going.', '/usage'),
+    (v_bob,   'welcome', 'Welcome to WritePilot', null, '/dashboard');
+
+  perform wp_test.assert_eq(
+    (select count(*)::int from public.notifications where user_id = v_alice and read_at is null),
+    2, 'notifications start unread'
+  );
+end $$;
+
+begin;
+  set local role authenticated;
+  set local request.jwt.claim.role = 'authenticated';
+
+  do $$
+  declare
+    v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+    v_id    uuid;
+  begin
+    execute format('set local request.jwt.claim.sub = %L', v_alice);
+
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.notifications), 2,
+      'a user sees only their own notifications'
+    );
+
+    select id into v_id from public.notifications
+    where user_id = v_alice and type = 'welcome';
+
+    update public.notifications set read_at = now() where id = v_id;
+    perform wp_test.assert(
+      (select read_at from public.notifications where id = v_id) is not null,
+      'a user can mark their own notification as read'
+    );
+
+    -- The column guard restores everything except read_at rather than raising.
+    update public.notifications
+    set title = 'Tampered', body = 'Tampered', action_url = '/admin'
+    where id = v_id;
+
+    perform wp_test.assert_eq(
+      (select title from public.notifications where id = v_id),
+      'Welcome to WritePilot',
+      'a user cannot rewrite a notification''s title'
+    );
+    perform wp_test.assert_eq(
+      (select action_url from public.notifications where id = v_id),
+      '/dashboard',
+      'a user cannot rewrite a notification''s action link'
+    );
+
+    -- Reassigning ownership is blocked by the policy's WITH CHECK clause,
+    -- before the guard is even reached.
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.notifications where user_id <> v_alice),
+      0, 'a user cannot see another user''s notifications after an update attempt'
+    );
+  end $$;
+
+  select wp_test.assert_denied(
+    $q$insert into public.notifications (user_id, title)
+       select id, 'Forged' from wp_test.fixtures where name = 'alice'$q$,
+    'a user cannot create their own notifications');
+commit;
+
+do $$
+declare v_bob uuid := (select id from wp_test.fixtures where name = 'bob');
+begin
+  perform wp_test.assert_eq(
+    (select count(*)::int from public.notifications where user_id = v_bob),
+    1, 'another user''s notifications are untouched'
+  );
+end $$;
+
+-- =============================================================================
+\echo '== 8. Cleanup =============================================================='
 -- =============================================================================
 
 do $$ begin

@@ -148,6 +148,36 @@ export const getEntitlements = cache(
   },
 );
 
+/** What an account looks like when its entitlements cannot be read. */
+export const EMPTY_ENTITLEMENTS = (userId: string): Entitlements => ({
+  userId,
+  plan: null,
+  subscription: null,
+  credits: { ...EMPTY_CREDITS },
+  features: {},
+  roles: [],
+  periodStart: null,
+});
+
+/**
+ * Entitlements that degrade instead of throwing.
+ *
+ * Used by anything rendered as part of the application shell, where a failed
+ * read should cost the user a credit meter -- not the entire page. Every
+ * feature gate already treats "no plan, no credits" as a refusal, so the
+ * fallback is safe rather than permissive.
+ */
+export async function getEntitlementsSafe(
+  userId: string,
+): Promise<Entitlements> {
+  try {
+    return await getEntitlements(userId);
+  } catch (error) {
+    console.error("[entitlements] falling back to empty entitlements", error);
+    return EMPTY_ENTITLEMENTS(userId);
+  }
+}
+
 /**
  * Entitlements read with the service role, for background jobs and admin views
  * where there is no user session to authorise against.

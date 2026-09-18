@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Source_Serif_4 } from "next/font/google";
 
 import { siteConfig } from "@/lib/config/site";
+import { getTheme } from "@/lib/theme/service";
+import { themeAttribute } from "@/lib/theme/constants";
 
 import "./globals.css";
 
@@ -63,12 +65,18 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  // Rendered into the markup so a returning visitor never sees a flash of the
+  // wrong palette. "system" renders no attribute and lets the media query in
+  // globals.css decide, which is the only correct answer on the server.
+  const theme = await getTheme();
+
   return (
     <html
       lang="en"
+      data-theme={themeAttribute(theme)}
       className={`${inter.variable} ${serifDisplay.variable} h-full`}
       suppressHydrationWarning
     >
