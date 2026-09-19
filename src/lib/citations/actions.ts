@@ -6,44 +6,14 @@ import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import { getEntitlements } from "@/lib/entitlements/service";
-import { extractDocumentText, deriveTitle } from "@/lib/documents/extract";
+import { deriveTitle } from "@/lib/documents/extract";
+import { resolveToolInput } from "@/lib/documents/input";
 import { checkCitations } from "./service";
 import { isCitationStyle } from "./styles";
 import { ok, fail, type ActionResult } from "@/lib/utils/result";
 import { toAppError } from "@/lib/utils/errors";
 import { routes } from "@/lib/config/routes";
-import type { CitationFindingStatus, ScanSource } from "@/types/database";
-
-const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
-
-async function resolveInput(
-  userId: string,
-  formData: FormData,
-): Promise<{ text: string; source: ScanSource; filename: string | null }> {
-  const file = formData.get("documentFile");
-
-  if (file instanceof File && file.size > 0) {
-    const entitlements = await getEntitlements(userId);
-    const planLimitBytes = (entitlements.plan?.maxFileSizeMb ?? 5) * 1024 * 1024;
-
-    const extracted = await extractDocumentText(file, {
-      maxBytes: Math.min(planLimitBytes, MAX_UPLOAD_BYTES),
-    });
-
-    return {
-      text: extracted.text,
-      source: extracted.source,
-      filename: extracted.filename,
-    };
-  }
-
-  return {
-    text: (formData.get("documentText") ?? "").toString(),
-    source: "text",
-    filename: null,
-  };
-}
+import type { CitationFindingStatus } from "@/types/database";
 
 export async function checkCitationsAction(
   _prevState: ActionResult<null> | null,
@@ -52,7 +22,12 @@ export async function checkCitationsAction(
   const user = await requireUser(routes.citations);
 
   try {
-    const input = await resolveInput(user.id, formData);
+    const input = await resolveToolInput({
+      userId: user.id,
+      formData,
+      textField: "documentText",
+      fileField: "documentFile",
+    });
 
     if (!input.text.trim()) {
       return fail("Paste your document or upload it as a file.", {
@@ -67,6 +42,7 @@ export async function checkCitationsAction(
 
     const title =
       (formData.get("title") ?? "").toString().trim() ||
+      input.documentTitle ||
       deriveTitle({ filename: input.filename, text: input.text });
 
     // The same document checked against the same style is the same work; a
@@ -78,6 +54,7 @@ export async function checkCitationsAction(
 
     const { checkId } = await checkCitations({
       userId: user.id,
+      documentId: input.documentId,
       text: input.text,
       title,
       style: styleValue,

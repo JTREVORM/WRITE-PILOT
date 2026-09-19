@@ -22,6 +22,8 @@ nor its own UI code for those decisions.
 | `migrations/20250105000000_naturalize.sql` | `naturalize_runs`, `naturalize_paragraphs` and their policies |
 | `migrations/20250106000000_grading.sql` | `rubrics`, `rubric_criteria`, `grades`, `grade_criteria`, the derived total |
 | `migrations/20250107000000_citations.sql` | `citation_checks`, `citation_entries`, `citation_findings`, the status guard |
+| `migrations/20250108000000_workspace.sql` | `documents`, `assignments`, `assignment_drafts`, the storage bucket and its policies |
+| `harness/00_harness.sql` | Stand-in for the Supabase schemas the migrations rely on, used by the test script |
 | `tests/database.test.sql` | Behavioural tests, including the RLS denial cases |
 
 ## Applying it
@@ -75,6 +77,10 @@ suite cleans up after itself and can be re-run. It covers:
 - citation checks: marking a finding resolved and reopening it, the timestamp
   being stamped server-side, and the guard that stops a user rewriting a
   finding's message, severity or origin
+- documents and assignments: the constraint that refuses a storage path outside
+  its owner's folder, renaming a document but not rewriting its text or its
+  path, creating an assignment directly as the user, and the two-sided policy
+  that stops a user attaching someone else's document as their own draft
 - **Row Level Security**: that a user cannot read another user's data, cannot
   raise their own credit balance, cannot grant themselves a role, cannot change
   their own plan, and cannot execute any privileged function
@@ -132,6 +138,25 @@ can move a finding's status and nothing else — otherwise "mark as resolved"
 would be a way to rewrite what the checker found, and the stored report would
 stop being a record of anything.
 
+**A document's file path is access control, not naming.** Objects live at
+`users/{user_id}/documents/{document_id}/{filename}` in a private bucket, and
+the storage policies match on that second segment. The same rule is enforced
+three times over: a check constraint on `documents.storage_path`, the storage
+policies themselves, and a check in application code before any URL is signed.
+Uploads are written by the server, so a client never chooses a path.
+
+**An assignment is inserted by its owner, not by the service role.** It is the
+one table here holding nothing derived — no credits, no model output, no counts
+— so RLS is exactly the right place for the decision. `assignment_drafts` checks
+both sides on insert: without the second clause a user could attach another
+user's document to their own assignment and read its title back through the
+join.
+
+**Deleting a document does not delete the analyses run on it.** The
+`document_id` columns on the analysis tables are `on delete set null`. A user
+who removes a document has not asked to lose the grade they paid for, and each
+analysis already stores the text it read.
+
 **Roles are not in the JWT.** They live in `user_roles` and are read per request,
 so revoking an admin takes effect immediately rather than at the next token
 refresh.
@@ -154,6 +179,9 @@ charge twice.
      `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email`.
 5. **Scheduled job**: call `public.renew_credit_period(user_id)` for each active
    subscriber at the start of their period (pg_cron, or an external scheduler).
+6. **Storage**: the `documents` bucket is created by the migration and must stay
+   private. Nothing serves from it directly; the application mints short-lived
+   signed URLs per download.
 
 ## Adding a table in a later phase
 

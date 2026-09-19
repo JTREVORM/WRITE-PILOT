@@ -652,6 +652,84 @@ function check(condition, passed, failed) {
   await ctx.close();
 }
 
+// --- workspace ----------------------------------------------------------------
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto(
+    `${BASE_URL}${process.env.WORKSPACE_PATH ?? "/shell-preview/workspace"}`,
+    { waitUntil: "networkidle" },
+  );
+
+  const body = await page.locator("body").innerText();
+
+  // The library's whole point: a document goes to a tool without a re-upload.
+  const toolLinks = await page
+    .locator('a[href*="documentId=doc-1"]')
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("href")));
+
+  check(
+    toolLinks.length === 5,
+    `every tool can be opened against a document (${toolLinks.length} links)`,
+  );
+  check(
+    ["/tools/ai-detector", "/tools/grammar", "/tools/naturalize", "/tools/grader", "/tools/citations"]
+      .every((route) => toolLinks.some((href) => href.startsWith(route))),
+    "the five tools are all reachable from a document",
+  );
+
+  // The banner a tool shows carries the field its action reads.
+  const hidden = page.locator('input[name="documentId"]');
+  check(
+    (await hidden.count()) === 1 && (await hidden.inputValue()) === "doc-1",
+    "the selected-document banner submits the document id",
+  );
+  check(
+    /From your library/.test(body),
+    "a tool run from the library says where its text came from",
+  );
+  check(
+    /Use something else/.test(body),
+    "there is a way back out of a library-selected document",
+  );
+
+  // Drafts are numbered by the server, and the control says what comes next.
+  check(/v1/.test(body), "an attached draft shows its version");
+  check(
+    /Added as v2/.test(body),
+    "the attach control says which version a new draft becomes",
+  );
+  check(
+    /leaves the document in your library/.test(body),
+    "removing a draft is distinguished from deleting the document",
+  );
+
+  // Attaching is a select, and the already-attached document is not offered.
+  const options = await page
+    .getByLabel("Document to attach as the next draft")
+    .locator("option")
+    .allInnerTexts();
+
+  // doc-1 is already v1, so it must not be offered as v2; the other two must.
+  check(
+    !options.some((option) => option.trim() === "Memory consolidation essay"),
+    "a document already attached is not offered again",
+  );
+  check(
+    options.some((option) => option.includes("rewritten intro")) &&
+      options.some((option) => option.includes("Supervisor feedback notes")),
+    "every unattached document is offered",
+  );
+
+  check(errors.length === 0, "no uncaught client errors in the workspace",
+    `client errors: ${errors.slice(0, 2).join(" | ")}`);
+
+  await page.screenshot({ path: `${SHOT_DIR}/workspace.png`, fullPage: true });
+  await ctx.close();
+}
+
 await browser.close();
 console.log(failures === 0 ? "\nInteraction checks passed." : `\n${failures} failed.`);
 process.exit(failures === 0 ? 0 : 1);

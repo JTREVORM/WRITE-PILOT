@@ -11,6 +11,11 @@ import { countWords, formatNumber } from "@/lib/utils/format";
 import { runScanAction } from "@/lib/detection/actions";
 import { ACCEPT_ATTRIBUTE } from "@/lib/documents/constants";
 import { MIN_WORDS_FOR_DETECTION } from "@/lib/detection/scoring";
+import {
+  SelectedDocument,
+  type SelectedToolDocument,
+} from "@/components/documents/selected-document";
+import { routes } from "@/lib/config/routes";
 import type { ActionResult } from "@/lib/utils/result";
 
 /**
@@ -25,11 +30,14 @@ export function ScanForm({
   maxWords,
   maxFileSizeMb,
   balance,
+  document = null,
 }: {
   creditCost: number;
   maxWords: number | null;
   maxFileSizeMb: number;
   balance: number;
+  /** Set when the tool was opened from the library. */
+  document?: SelectedToolDocument | null;
 }) {
   const [state, formAction, isPending] = useActionState<
     ActionResult<null> | null,
@@ -42,13 +50,17 @@ export function ScanForm({
 
   const wordCount = file ? null : countWords(text);
   const tooShort = wordCount !== null && wordCount > 0 && wordCount < MIN_WORDS_FOR_DETECTION;
-  const tooLong = wordCount !== null && maxWords !== null && wordCount > maxWords;
+  // A chosen document wins on the server, so the gating follows its length.
+  const activeWords = document ? document.wordCount : wordCount;
+  const tooLong = activeWords !== null && maxWords !== null && activeWords > maxWords;
   const canAfford = balance >= creditCost;
 
   const ready =
     !isPending &&
     canAfford &&
-    (file !== null || (wordCount !== null && wordCount >= MIN_WORDS_FOR_DETECTION)) &&
+    (document !== null ||
+      file !== null ||
+      (wordCount !== null && wordCount >= MIN_WORDS_FOR_DETECTION)) &&
     !tooLong;
 
   function clearFile() {
@@ -58,6 +70,10 @@ export function ScanForm({
 
   return (
     <form action={formAction} className="space-y-5">
+      {document ? (
+        <SelectedDocument document={document} toolHref={routes.aiDetector} />
+      ) : null}
+
       {state && !state.ok ? (
         <Alert tone="danger" live>
           {state.error}
@@ -84,7 +100,7 @@ export function ScanForm({
           name="text"
           value={text}
           onChange={(event) => setText(event.target.value)}
-          disabled={file !== null || isPending}
+          disabled={document !== null || file !== null || isPending}
           rows={12}
           className="min-h-56 font-normal"
           placeholder="Paste the text you want to check…"
@@ -123,7 +139,7 @@ export function ScanForm({
         <label
           className={cn(
             "inline-flex cursor-pointer items-center gap-2 rounded-lg border border-line-strong px-3 py-1.5 text-sm font-medium transition-colors hover:bg-surface-muted",
-            isPending && "pointer-events-none opacity-60",
+            (isPending || document !== null) && "pointer-events-none opacity-60",
           )}
         >
           <Upload className="size-4" aria-hidden="true" />
@@ -133,7 +149,7 @@ export function ScanForm({
             type="file"
             name="file"
             accept={ACCEPT_ATTRIBUTE}
-            disabled={isPending}
+            disabled={isPending || document !== null}
             className="sr-only"
             onChange={(event) => {
               const selected = event.target.files?.[0] ?? null;

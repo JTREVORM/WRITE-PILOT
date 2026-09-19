@@ -212,6 +212,8 @@ export async function extractRubric(
 
 export interface GradeSubmissionInput {
   userId: string;
+  /** The library document this was run on, when it came from there. */
+  documentId?: string | null;
   rubricId: string;
   text: string;
   title: string;
@@ -379,6 +381,7 @@ export async function gradeSubmission(
     .from("grades")
     .insert({
       user_id: input.userId,
+      document_id: input.documentId ?? null,
       rubric_id: rubric.id,
       rubric_title: rubric.title,
       title: input.title.slice(0, 200),

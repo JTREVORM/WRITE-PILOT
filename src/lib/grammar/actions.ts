@@ -6,13 +6,13 @@ import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import { getEntitlements } from "@/lib/entitlements/service";
-import { extractDocumentText, deriveTitle } from "@/lib/documents/extract";
+import { deriveTitle } from "@/lib/documents/extract";
+import { resolveToolInput } from "@/lib/documents/input";
 import { runGrammarCheck } from "./service";
 import { ok, fail, type ActionResult } from "@/lib/utils/result";
 import { toAppError } from "@/lib/utils/errors";
 import { routes } from "@/lib/config/routes";
-import type { ScanSource, SuggestionStatus } from "@/types/database";
+import type { SuggestionStatus } from "@/types/database";
 
 /**
  * Grammar Checker actions.
@@ -23,34 +23,18 @@ import type { ScanSource, SuggestionStatus } from "@/types/database";
  * guard means the only field these can move is `status`.
  */
 
-const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
-
 export async function runGrammarCheckAction(
   _prevState: ActionResult<null> | null,
   formData: FormData,
 ): Promise<ActionResult<null>> {
   const user = await requireUser(routes.grammar);
 
-  let text = (formData.get("text") ?? "").toString();
-  let source: ScanSource = "text";
-  let filename: string | null = null;
-
   const file = formData.get("file");
   const hasFile = file instanceof File && file.size > 0;
 
   try {
-    if (hasFile) {
-      const entitlements = await getEntitlements(user.id);
-      const planLimitBytes = (entitlements.plan?.maxFileSizeMb ?? 5) * 1024 * 1024;
-
-      const extracted = await extractDocumentText(file, {
-        maxBytes: Math.min(planLimitBytes, MAX_UPLOAD_BYTES),
-      });
-
-      text = extracted.text;
-      source = extracted.source;
-      filename = extracted.filename;
-    }
+    const input = await resolveToolInput({ userId: user.id, formData });
+    const { text, source, filename, documentId, documentTitle } = input;
 
     if (!text.trim()) {
       return fail(
@@ -63,6 +47,7 @@ export async function runGrammarCheckAction(
 
     const title =
       (formData.get("title") ?? "").toString().trim() ||
+      documentTitle ||
       deriveTitle({ filename, text });
 
     // Keyed by content, so a double submit of the same text charges once.
@@ -73,6 +58,7 @@ export async function runGrammarCheckAction(
 
     const { checkId } = await runGrammarCheck({
       userId: user.id,
+      documentId,
       text,
       title,
       source,

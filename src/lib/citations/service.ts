@@ -40,6 +40,8 @@ const MAX_CITATIONS_SENT = 60;
 
 export interface CheckCitationsInput {
   userId: string;
+  /** The library document this was run on, when it came from there. */
+  documentId?: string | null;
   text: string;
   title: string;
   style: CitationStyleKey;
@@ -163,6 +165,7 @@ export async function checkCitations(
     .from("citation_checks")
     .insert({
       user_id: input.userId,
+      document_id: input.documentId ?? null,
       title: input.title.slice(0, 200),
       source: input.source,
       source_filename: input.filename ?? null,

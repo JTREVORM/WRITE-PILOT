@@ -8,6 +8,7 @@ import { requireUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { getEntitlements } from "@/lib/entitlements/service";
 import { extractDocumentText, deriveTitle } from "@/lib/documents/extract";
+import { resolveToolInput } from "@/lib/documents/input";
 import { extractRubric, gradeSubmission } from "./service";
 import { ok, fail, type ActionResult } from "@/lib/utils/result";
 import { toAppError } from "@/lib/utils/errors";
@@ -97,7 +98,7 @@ export async function gradeSubmissionAction(
   }
 
   try {
-    const input = await resolveInput(user.id, formData, "text", "file");
+    const input = await resolveToolInput({ userId: user.id, formData });
 
     if (!input.text.trim()) {
       return fail("Paste the submission or upload it as a file.", {
@@ -119,6 +120,7 @@ export async function gradeSubmissionAction(
 
     const { gradeId } = await gradeSubmission({
       userId: user.id,
+      documentId: input.documentId,
       rubricId,
       text: input.text,
       title,

@@ -14,14 +14,18 @@ import type { ScanSource } from "@/types/database";
  * are attacker-controlled, and a mislabelled file should be rejected rather
  * than fed to a parser that does not expect it.
  *
- * Only the text is kept. Phase 3 does not store the uploaded file itself; that
- * arrives with the document workspace.
+ * The bytes are returned alongside the text. A tool run discards them; the
+ * document workspace stores them, under the owner's own path.
  */
 
 export interface ExtractedDocument {
   text: string;
   source: ScanSource;
   filename: string;
+  /** The file as uploaded. The workspace stores it; the tools ignore it. */
+  bytes: Uint8Array;
+  /** Decided from the bytes, never from the browser's Content-Type. */
+  contentType: string;
 }
 
 /** Magic bytes, checked before any parser touches the file. */
@@ -126,14 +130,27 @@ export async function extractDocumentText(
 
   if (kind === "pdf") {
     const text = await extractPdf(bytes);
-    return { text: normalizeExtractedText(text), source: "pdf", filename };
+    return {
+      text: normalizeExtractedText(text),
+      source: "pdf",
+      filename,
+      bytes,
+      contentType: "application/pdf",
+    };
   }
 
   if (kind === "zip") {
     // A .zip that is not a Word document will fail in mammoth, which reports it
     // as an unreadable document — the right message either way.
     const text = await extractDocx(bytes);
-    return { text: normalizeExtractedText(text), source: "docx", filename };
+    return {
+      text: normalizeExtractedText(text),
+      source: "docx",
+      filename,
+      bytes,
+      contentType:
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    };
   }
 
   if (!looksLikeText(bytes)) {
@@ -144,7 +161,13 @@ export async function extractDocumentText(
   }
 
   const text = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
-  return { text: normalizeExtractedText(text), source: "txt", filename };
+  return {
+    text: normalizeExtractedText(text),
+    source: "txt",
+    filename,
+    bytes,
+    contentType: "text/plain; charset=utf-8",
+  };
 }
 
 export { normalizeExtractedText, deriveTitle } from "./text";

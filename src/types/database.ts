@@ -279,6 +279,7 @@ export type RubricCriterionRow = {
 };
 
 export type GradeRow = {
+  document_id: string | null;
   id: string;
   user_id: string;
   rubric_id: string | null;
@@ -317,12 +318,53 @@ export type GradeCriterionRow = {
   improvements: Json;
 };
 
+export type AssignmentStatus = "planning" | "drafting" | "submitted";
+
+export type DocumentRow = {
+  id: string;
+  user_id: string;
+  title: string;
+  source: ScanSource;
+  original_filename: string | null;
+  storage_path: string | null;
+  content_type: string | null;
+  byte_size: number | null;
+  content: string;
+  word_count: number;
+  character_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AssignmentRow = {
+  id: string;
+  user_id: string;
+  title: string;
+  course: string | null;
+  instructions: string | null;
+  rubric_id: string | null;
+  status: AssignmentStatus;
+  due_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AssignmentDraftRow = {
+  id: string;
+  assignment_id: string;
+  document_id: string;
+  version: number;
+  note: string | null;
+  created_at: string;
+};
+
 export type CitationStyleValue = "apa7" | "mla9" | "chicago" | "harvard";
 export type CitationFindingOrigin = "local" | "model";
 export type CitationSeverity = "error" | "warning" | "info";
 export type CitationFindingStatus = "open" | "resolved" | "dismissed";
 
 export type CitationCheckRow = {
+  document_id: string | null;
   id: string;
   user_id: string;
   title: string;
@@ -372,6 +414,7 @@ export type CitationFindingRow = {
 };
 
 export type NaturalizeRunRow = {
+  document_id: string | null;
   id: string;
   user_id: string;
   title: string;
@@ -406,6 +449,7 @@ export type NaturalizeParagraphRow = {
 };
 
 export type GrammarCheckRow = {
+  document_id: string | null;
   id: string;
   user_id: string;
   title: string;
@@ -441,6 +485,7 @@ export type GrammarSuggestionRow = {
 };
 
 export type AiScanRow = {
+  document_id: string | null;
   id: string;
   user_id: string;
   title: string;
@@ -581,6 +626,15 @@ export type Database = {
       naturalize_paragraphs: Table<
         NaturalizeParagraphRow,
         "run_id" | "position" | "original_text" | "improved_text"
+      >;
+      documents: Table<
+        DocumentRow,
+        "user_id" | "title" | "content"
+      >;
+      assignments: Table<AssignmentRow, "user_id" | "title">;
+      assignment_drafts: Table<
+        AssignmentDraftRow,
+        "assignment_id" | "document_id" | "version"
       >;
       citation_checks: Table<
         CitationCheckRow,

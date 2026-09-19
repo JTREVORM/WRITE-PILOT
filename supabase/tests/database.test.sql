@@ -1442,7 +1442,225 @@ commit;
 
 
 -- =============================================================================
-\echo '== 13. Cleanup =============================================================='
+\echo '== 13. Documents and assignments ============================================'
+-- =============================================================================
+
+do $$
+declare
+  v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+  v_bob   uuid := (select id from wp_test.fixtures where name = 'bob');
+  v_doc   uuid;
+  v_ok    boolean;
+begin
+  insert into public.documents
+    (user_id, title, source, original_filename, storage_path, content_type,
+     byte_size, content, word_count, character_count)
+  values (
+    v_alice, 'Memory consolidation essay', 'docx', 'essay.docx',
+    'users/' || v_alice::text || '/documents/00000000-0000-0000-0000-0000000000aa/essay.docx',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    24576, 'The essay text.', 1240, 6800
+  )
+  returning id into v_doc;
+
+  insert into wp_test.fixtures values ('doc', v_doc);
+
+  -- The path constraint is the last line of defence behind the storage
+  -- policies: a file may only be filed under its own owner's prefix.
+  begin
+    insert into public.documents (user_id, title, content, storage_path)
+    values (
+      v_alice, 'Misfiled', 'x',
+      'users/' || v_bob::text || '/documents/00000000-0000-0000-0000-0000000000bb/stolen.pdf'
+    );
+    v_ok := false;
+  exception when check_violation then
+    v_ok := true;
+  end;
+  perform wp_test.assert(
+    v_ok, 'a document cannot be filed under another user''s storage prefix'
+  );
+
+  -- Pasted text has no file, which is a different thing from a missing path.
+  insert into public.documents (user_id, title, content, word_count, character_count)
+  values (v_alice, 'Pasted notes', 'Some notes.', 210, 1100);
+
+  -- Bob's document id is recorded here because Alice cannot read it through
+  -- RLS -- and a denial test that silently selects no rows proves nothing.
+  insert into public.documents (user_id, title, content)
+  values (v_bob, 'Bob''s draft', 'Other text.')
+  returning id into v_doc;
+
+  insert into wp_test.fixtures values ('bob_doc', v_doc);
+end $$;
+
+-- An analysis run against a document is linked to it, and survives it.
+do $$
+declare
+  v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+  v_doc   uuid := (select id from wp_test.fixtures where name = 'doc');
+  v_check uuid;
+begin
+  insert into public.citation_checks
+    (user_id, document_id, title, content, style, word_count)
+  values (v_alice, v_doc, 'Citations in the essay', 'The essay text.', 'apa7', 1240)
+  returning id into v_check;
+
+  insert into public.grammar_checks
+    (user_id, document_id, title, content, word_count, character_count)
+  values (v_alice, v_doc, 'Grammar in the essay', 'The essay text.', 1240, 6800);
+
+  perform wp_test.assert_eq(
+    (select count(*)::int from public.citation_checks where document_id = v_doc),
+    1, 'a check records the document it was run on'
+  );
+
+  delete from public.documents where id = v_doc;
+
+  perform wp_test.assert_eq(
+    (select count(*)::int from public.citation_checks where id = v_check),
+    1, 'deleting a document keeps the checks run on it'
+  );
+  perform wp_test.assert(
+    (select document_id from public.citation_checks where id = v_check) is null,
+    'the check''s document link is cleared rather than cascading'
+  );
+  perform wp_test.assert_eq(
+    (select content from public.citation_checks where id = v_check),
+    'The essay text.',
+    'the check keeps its own copy of the text it read'
+  );
+end $$;
+
+begin;
+  set local role authenticated;
+  set local request.jwt.claim.role = 'authenticated';
+
+  do $$
+  declare
+    v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+    v_doc   uuid;
+    v_assignment uuid;
+  begin
+    execute format('set local request.jwt.claim.sub = %L', v_alice);
+
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.documents), 1,
+      'a user sees only their own documents'
+    );
+
+    -- Renaming is the user's own decision on their own row.
+    select id into v_doc from public.documents limit 1;
+    update public.documents set title = 'Renamed notes' where id = v_doc;
+
+    perform wp_test.assert_eq(
+      (select title from public.documents where id = v_doc),
+      'Renamed notes', 'a user can rename their document'
+    );
+
+    -- ...but the text and the file behind it are a record of what was uploaded.
+    update public.documents
+    set content = 'Rewritten',
+        word_count = 999999,
+        storage_path = 'users/attacker/documents/x/y.pdf'
+    where id = v_doc;
+
+    perform wp_test.assert_eq(
+      (select content from public.documents where id = v_doc),
+      'Some notes.', 'a user cannot rewrite a document''s text'
+    );
+    perform wp_test.assert_eq(
+      (select word_count from public.documents where id = v_doc),
+      210, 'a user cannot rewrite a document''s counts'
+    );
+    perform wp_test.assert(
+      (select storage_path from public.documents where id = v_doc) is null,
+      'a user cannot point a document at another storage path'
+    );
+
+    -- An assignment is wholly user-authored, so a user creates it directly.
+    insert into public.assignments (user_id, title, course, status)
+    values (v_alice, 'CS 1102 Assignment 1', 'Cognitive Science', 'drafting')
+    returning id into v_assignment;
+
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.assignments), 1,
+      'a user can create their own assignment'
+    );
+
+    insert into public.assignment_drafts (assignment_id, document_id, version)
+    values (v_assignment, v_doc, 1);
+
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.assignment_drafts), 1,
+      'a user can attach their own document as a draft'
+    );
+
+    update public.assignments set status = 'submitted' where id = v_assignment;
+    perform wp_test.assert_eq(
+      (select status::text from public.assignments where id = v_assignment),
+      'submitted', 'a user can move their assignment along'
+    );
+  end $$;
+
+  -- The insert policy checks both sides: the assignment and the document.
+  select wp_test.assert_denied(
+    $q$insert into public.assignment_drafts (assignment_id, document_id, version)
+       select a.id, f.id, 2
+       from public.assignments a,
+            wp_test.fixtures f
+       where f.name = 'bob_doc'$q$,
+    'a user cannot attach another user''s document as a draft');
+
+  select wp_test.assert_denied(
+    $q$insert into public.assignments (user_id, title)
+       select id, 'Planted' from wp_test.fixtures where name = 'bob'$q$,
+    'a user cannot create an assignment for someone else');
+
+  select wp_test.assert_denied(
+    $q$insert into public.documents (user_id, title, content)
+       select id, 'Planted', 'x' from wp_test.fixtures where name = 'alice'$q$,
+    'a user cannot insert a document directly');
+
+  select wp_test.assert_denied(
+    $q$update public.assignment_drafts set version = 99$q$,
+    'a user cannot renumber their drafts');
+commit;
+
+-- A draft is a link. Detaching it, or deleting the assignment, leaves the
+-- document in the library.
+begin;
+  set local role authenticated;
+  set local request.jwt.claim.role = 'authenticated';
+
+  do $$
+  declare
+    v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+    v_assignment uuid;
+  begin
+    execute format('set local request.jwt.claim.sub = %L', v_alice);
+
+    -- Read back through the user's own policies rather than a fixture row:
+    -- the harness table is not writable by an authenticated session, which is
+    -- itself the right shape for it to have.
+    select id into v_assignment from public.assignments limit 1;
+
+    delete from public.assignments where id = v_assignment;
+
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.assignment_drafts), 0,
+      'deleting an assignment cascades to its draft links'
+    );
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.documents), 1,
+      'deleting an assignment leaves the documents in the library'
+    );
+  end $$;
+commit;
+
+
+-- =============================================================================
+\echo '== 14. Cleanup =============================================================='
 -- =============================================================================
 
 do $$ begin

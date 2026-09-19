@@ -22,6 +22,7 @@ import { getEntitlementsSafe } from "@/lib/entitlements/service";
 import { listScans } from "@/lib/detection/queries";
 import { isAiConfigured } from "@/lib/env/server";
 import { FEATURE_KEY } from "@/lib/detection/service";
+import { loadSelectedDocument } from "@/lib/documents/selection";
 import { routes } from "@/lib/config/routes";
 import { formatNumber, formatRelativeTime } from "@/lib/utils/format";
 
@@ -84,9 +85,14 @@ function HistorySkeleton() {
   );
 }
 
-export default async function AiDetectorPage() {
+export default async function AiDetectorPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const user = await requireUser(routes.aiDetector);
   const entitlements = await getEntitlementsSafe(user.id);
+  const selectedDocument = await loadSelectedDocument(searchParams);
   const feature = entitlements.features[FEATURE_KEY];
 
   const available = Boolean(feature?.enabled) && isAiConfigured;
@@ -126,6 +132,7 @@ export default async function AiDetectorPage() {
             <CardContent>
               {available ? (
                 <ScanForm
+                  document={selectedDocument}
                   creditCost={feature.creditCost}
                   maxWords={feature.maxWords}
                   maxFileSizeMb={entitlements.plan?.maxFileSizeMb ?? 5}

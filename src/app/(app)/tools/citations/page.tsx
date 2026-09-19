@@ -22,6 +22,7 @@ import { listCitationChecks } from "@/lib/citations/queries";
 import { getCitationStyle } from "@/lib/citations/styles";
 import { isAiConfigured } from "@/lib/env/server";
 import { FEATURE_KEY } from "@/lib/citations/service";
+import { loadSelectedDocument } from "@/lib/documents/selection";
 import { routes } from "@/lib/config/routes";
 import { formatRelativeTime } from "@/lib/utils/format";
 
@@ -89,9 +90,14 @@ function ListSkeleton() {
   );
 }
 
-export default async function CitationsPage() {
+export default async function CitationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const user = await requireUser(routes.citations);
   const entitlements = await getEntitlementsSafe(user.id);
+  const selectedDocument = await loadSelectedDocument(searchParams);
 
   const feature = entitlements.features[FEATURE_KEY];
   const enabled = Boolean(feature?.enabled);
@@ -132,6 +138,7 @@ export default async function CitationsPage() {
             <CardContent>
               {available ? (
                 <CheckForm
+                  document={selectedDocument}
                   creditCost={feature!.creditCost}
                   maxWords={feature!.maxWords}
                   maxFileSizeMb={entitlements.plan?.maxFileSizeMb ?? 5}

@@ -10,16 +10,17 @@ professionals worldwide.
 
 ## Where the project stands
 
-**Phases 1–7 are complete.** Authentication, profiles, roles, plans,
+**Phases 1–8 are complete.** Authentication, profiles, roles, plans,
 subscriptions, the credit ledger, usage tracking and Row Level Security (Phase
 1); the streaming dashboard, notification centre, theme control and the rest of
 the application shell (Phase 2); the AI Detector, the provider layer and
 document text extraction (Phase 3); the Grammar Checker (Phase 4); Naturalize
-(Phase 5); the AI Rubric Grader (Phase 6); the Citation Checker (Phase 7).
+(Phase 5); the AI Rubric Grader (Phase 6); the Citation Checker (Phase 7); the
+document library and assignment workspace (Phase 8).
 
-Every tool in the navigation now links to a route that exists. What remains is
-the workspace around them — documents, assignments, the writing coach — and the
-commercial and administrative surfaces.
+Every tool and every workspace area in the navigation now links to a route that
+exists. What remains is the writing coach, and the commercial and administrative
+surfaces.
 
 ## Stack
 
@@ -92,6 +93,8 @@ src/
     naturalize/        Comparison views, word diff, integrity panel, mode picker
     grading/           Grade meter, criterion breakdown, rubric editor, disclaimer
     citations/         Coverage figures, findings list, reference list, limits
+    documents/         Library form, document actions, tool links, selection banner
+    assignments/       Brief form, draft manager
   lib/
     env/               Zod-validated environment, split public vs server-only
     theme/             Theme preference: cookie, server read, server action
@@ -103,7 +106,8 @@ src/
     naturalize/        Naturalize: modes, word diff, integrity checks, prompt
     grading/           AI Grader: rubric normalisation, scoring, bands, prompt
     citations/         Citation Checker: parsing, cross-matching, merging, prompt
-    documents/         Upload text extraction (PDF, DOCX, TXT)
+    assignments/       Assignments and their drafts
+    documents/         Library, storage paths, signed URLs, text extraction
     supabase/          Browser, server, proxy and service-role clients
     auth/              Sessions, role guards, server actions, provisioning
     entitlements/      Plan and credit policy — the gate before every AI call
@@ -339,6 +343,45 @@ The parsed reference list is shown back as it was read. If the checker found
 three entries where the document has five, every count on the page is wrong, and
 the writer is the only person in a position to notice.
 
+### How the workspace works
+
+Until Phase 8 every tool took a paste or an upload, used it once and kept its
+own copy. That is fine for a single check and falls apart across a piece of work
+drafted four times: the same essay gets uploaded to five tools and nothing
+connects them.
+
+**A document is added once and reused.** Every tool accepts three kinds of
+input — pasted text, an uploaded file, or a document from the library — through
+one resolver, and a tool opened from the library shows which document it is
+about to read. The run is stored against that document, which is what fills in
+the history on the document's own page: what has been checked, what it said, and
+a link straight back to it.
+
+**Files are private, by path and by policy.** Every object lives at
+`users/{user_id}/documents/{document_id}/{filename}` in a private bucket. That
+prefix is not a naming convention — it is what the storage policies match on, so
+building it is a module of its own with tests for the cases that matter: a
+filename carrying `../` is reduced to its last segment before anything else
+happens, and the path is checked against the caller's own id again at the moment
+a download URL is signed. A database constraint refuses to store a path outside
+its owner's folder at all. Downloads are short-lived signed URLs, minted per
+request; nothing in the bucket is ever public.
+
+**Deleting a document does not delete the checks run on it.** Every analysis
+keeps its own copy of the text it read — it has to, or a stored report would
+stop matching what it reported on — so the link is cleared rather than
+cascading, and the analyses remain, deletable on their own. The confirmation
+says so before the click rather than after, because someone deleting their
+writing is entitled to know exactly what that reaches.
+
+**An assignment is the one thing here a user writes themselves.** No credits, no
+model, nothing derived — so assignments are created and edited directly through
+RLS rather than through a privileged function, and the policies are the whole of
+the protection. Attaching a draft is checked on both sides: the assignment and
+the document must both belong to the caller. Draft versions are numbered by the
+server in the order they were attached, so the list is a record of how the work
+progressed rather than something a client can renumber.
+
 ### Theme
 
 Light, dark or follow-the-system, stored in a cookie and rendered into the HTML
@@ -402,8 +445,8 @@ across every surface.
 | 5 | Naturalize | **Complete** |
 | 6 | AI Rubric Grader | **Complete** |
 | 7 | Citation Checker | **Complete** |
-| 8 | Document and assignment workspaces | Next |
-| 9 | Writing Coach and priority improvements | Planned |
+| 8 | Document and assignment workspaces | **Complete** |
+| 9 | Writing Coach and priority improvements | Next |
 | 10 | Subscriptions, payments, plan enforcement | Planned |
 | 11 | Admin dashboard and analytics | Planned |
 | 12 | Security, testing, optimisation | Planned |

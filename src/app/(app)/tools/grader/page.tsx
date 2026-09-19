@@ -23,6 +23,10 @@ import { getEntitlementsSafe } from "@/lib/entitlements/service";
 import { listGrades, listRubrics } from "@/lib/grading/queries";
 import { isAiConfigured } from "@/lib/env/server";
 import { GRADING_FEATURE_KEY, RUBRIC_FEATURE_KEY } from "@/lib/grading/service";
+import {
+  loadSelectedDocument,
+  readParam,
+} from "@/lib/documents/selection";
 import { routes } from "@/lib/config/routes";
 import { formatRelativeTime } from "@/lib/utils/format";
 
@@ -130,12 +134,25 @@ function ListSkeleton() {
   );
 }
 
-export default async function GraderPage() {
+export default async function GraderPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const user = await requireUser(routes.grader);
-  const [entitlements, rubrics] = await Promise.all([
+  const [entitlements, rubrics, params] = await Promise.all([
     getEntitlementsSafe(user.id),
     listRubrics(),
+    searchParams,
   ]);
+
+  // An assignment links here with both: the draft to assess and the rubric it
+  // is to be marked against.
+  const selectedDocument = await loadSelectedDocument(Promise.resolve(params));
+  const requestedRubricId = readParam(params, "rubricId");
+  const defaultRubricId = rubrics.some((rubric) => rubric.id === requestedRubricId)
+    ? requestedRubricId
+    : undefined;
 
   const rubricFeature = entitlements.features[RUBRIC_FEATURE_KEY];
   const gradeFeature = entitlements.features[GRADING_FEATURE_KEY];
@@ -177,6 +194,8 @@ export default async function GraderPage() {
             <CardContent>
               {available ? (
                 <GradeForm
+                  document={selectedDocument}
+                  defaultRubricId={defaultRubricId}
                   rubrics={rubrics}
                   creditCost={gradeFeature!.creditCost}
                   maxWords={gradeFeature!.maxWords}

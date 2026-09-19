@@ -34,6 +34,8 @@ export const MIN_WORDS_FOR_GRAMMAR = 10;
 
 export interface RunCheckInput {
   userId: string;
+  /** The library document this was run on, when it came from there. */
+  documentId?: string | null;
   text: string;
   title: string;
   source: ScanSource;
@@ -177,6 +179,7 @@ export async function runGrammarCheck(
     .from("grammar_checks")
     .insert({
       user_id: input.userId,
+      document_id: input.documentId ?? null,
       title: input.title.slice(0, 200),
       source: input.source,
       source_filename: input.filename ?? null,
