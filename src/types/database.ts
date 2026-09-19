@@ -317,6 +317,60 @@ export type GradeCriterionRow = {
   improvements: Json;
 };
 
+export type CitationStyleValue = "apa7" | "mla9" | "chicago" | "harvard";
+export type CitationFindingOrigin = "local" | "model";
+export type CitationSeverity = "error" | "warning" | "info";
+export type CitationFindingStatus = "open" | "resolved" | "dismissed";
+
+export type CitationCheckRow = {
+  id: string;
+  user_id: string;
+  title: string;
+  source: ScanSource;
+  source_filename: string | null;
+  content: string;
+  style: CitationStyleValue;
+  detected_style: string | null;
+  word_count: number;
+  list_heading: string | null;
+  in_text_count: number;
+  distinct_sources: number;
+  reference_count: number;
+  summary: string | null;
+  provider: string | null;
+  model: string | null;
+  duration_ms: number | null;
+  credits_charged: number;
+  credit_transaction_id: string | null;
+  created_at: string;
+};
+
+export type CitationEntryRow = {
+  id: string;
+  check_id: string;
+  position: number;
+  raw_text: string;
+  first_author: string | null;
+  year: string | null;
+  has_link: boolean;
+  cited: boolean;
+};
+
+export type CitationFindingRow = {
+  id: string;
+  check_id: string;
+  entry_id: string | null;
+  position: number;
+  origin: CitationFindingOrigin;
+  kind: string;
+  severity: CitationSeverity;
+  target_text: string;
+  message: string;
+  suggestion: string | null;
+  status: CitationFindingStatus;
+  resolved_at: string | null;
+};
+
 export type NaturalizeRunRow = {
   id: string;
   user_id: string;
@@ -527,6 +581,23 @@ export type Database = {
       naturalize_paragraphs: Table<
         NaturalizeParagraphRow,
         "run_id" | "position" | "original_text" | "improved_text"
+      >;
+      citation_checks: Table<
+        CitationCheckRow,
+        "user_id" | "title" | "content" | "style" | "word_count"
+      >;
+      citation_entries: Table<
+        CitationEntryRow,
+        "check_id" | "position" | "raw_text"
+      >;
+      citation_findings: Table<
+        CitationFindingRow,
+        | "check_id"
+        | "position"
+        | "origin"
+        | "kind"
+        | "severity"
+        | "message"
       >;
       grammar_suggestions: Table<
         GrammarSuggestionRow,

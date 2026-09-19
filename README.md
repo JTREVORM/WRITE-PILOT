@@ -10,15 +10,16 @@ professionals worldwide.
 
 ## Where the project stands
 
-**Phases 1–6 are complete.** Authentication, profiles, roles, plans,
+**Phases 1–7 are complete.** Authentication, profiles, roles, plans,
 subscriptions, the credit ledger, usage tracking and Row Level Security (Phase
 1); the streaming dashboard, notification centre, theme control and the rest of
 the application shell (Phase 2); the AI Detector, the provider layer and
 document text extraction (Phase 3); the Grammar Checker (Phase 4); Naturalize
-(Phase 5); the AI Rubric Grader (Phase 6).
+(Phase 5); the AI Rubric Grader (Phase 6); the Citation Checker (Phase 7).
 
-The Citation Checker arrives in a later phase. It is visible in the navigation
-marked "Soon" rather than linking to a route that does not exist.
+Every tool in the navigation now links to a route that exists. What remains is
+the workspace around them — documents, assignments, the writing coach — and the
+commercial and administrative surfaces.
 
 ## Stack
 
@@ -90,6 +91,7 @@ src/
     grammar/           Interactive workspace, readability panel, check form
     naturalize/        Comparison views, word diff, integrity panel, mode picker
     grading/           Grade meter, criterion breakdown, rubric editor, disclaimer
+    citations/         Coverage figures, findings list, reference list, limits
   lib/
     env/               Zod-validated environment, split public vs server-only
     theme/             Theme preference: cookie, server read, server action
@@ -100,6 +102,7 @@ src/
     grammar/           Grammar Checker: readability, locating, applying, prompt
     naturalize/        Naturalize: modes, word diff, integrity checks, prompt
     grading/           AI Grader: rubric normalisation, scoring, bands, prompt
+    citations/         Citation Checker: parsing, cross-matching, merging, prompt
     documents/         Upload text extraction (PDF, DOCX, TXT)
     supabase/          Browser, server, proxy and service-role clients
     auth/              Sessions, role guards, server actions, provisioning
@@ -300,6 +303,42 @@ Grades are not editable by their owner — a grade a user could rewrite is not
 worth storing — and they outlive the rubric they came from, because each one
 snapshots the criteria it was judged against.
 
+### How the Citation Checker works
+
+The check has two halves, and they are never blended into one undifferentiated
+list of "issues".
+
+**The first half is arithmetic.** Which sources are cited, which are listed, and
+whether those two sets agree is bookkeeping, and bookkeeping is the last thing
+that should be handed to a language model. Citations are parsed out of the prose
+— parenthetical, narrative, and the numbered form none of the supported styles
+use — the reference list is found and split into entries, and the two are
+matched on author and year. A source cited and never listed, an entry listed and
+never cited, a year that disagrees between the two, a duplicated entry: all of
+these are counted, locally, before any model is involved. They cost nothing to
+compute and they are stated as fact, because they are.
+
+The parser is tuned to under-claim. "(Table 2)" and "(p < 0.05)" have exactly
+the shape of an MLA citation, and telling a writer to add a reference for Table 2
+is the most annoying possible false positive, so cross-references are excluded by
+name. A citation the parser misses costs the user nothing; one it invents costs
+them an afternoon.
+
+**The second half is a reading.** Whether an entry follows APA 7 is a judgement,
+and that is the only thing the model is asked. It is told what it cannot see —
+italics, indentation and small caps do not survive text extraction, so it may
+never report them — and what it cannot know: it cannot verify that a source
+exists, that a DOI resolves, or that a work supports the claim it is cited for,
+and it is forbidden from implying otherwise.
+
+Every finding is stored with its origin, and the interface labels them
+**Checked** and **Assessed** and lets you filter to either. A user who wants to
+know which half of the report is arithmetic is entitled to an answer.
+
+The parsed reference list is shown back as it was read. If the checker found
+three entries where the document has five, every count on the page is wrong, and
+the writer is the only person in a position to notice.
+
 ### Theme
 
 Light, dark or follow-the-system, stored in a cookie and rendered into the HTML
@@ -362,8 +401,8 @@ across every surface.
 | 4 | Grammar Checker | **Complete** |
 | 5 | Naturalize | **Complete** |
 | 6 | AI Rubric Grader | **Complete** |
-| 7 | Citation Checker | Next |
-| 8 | Document and assignment workspaces | Planned |
+| 7 | Citation Checker | **Complete** |
+| 8 | Document and assignment workspaces | Next |
 | 9 | Writing Coach and priority improvements | Planned |
 | 10 | Subscriptions, payments, plan enforcement | Planned |
 | 11 | Admin dashboard and analytics | Planned |

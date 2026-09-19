@@ -1250,7 +1250,199 @@ commit;
 
 
 -- =============================================================================
-\echo '== 12. Cleanup =============================================================='
+\echo '== 12. Citation checks ======================================================'
+-- =============================================================================
+
+do $$
+declare
+  v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+  v_bob   uuid := (select id from wp_test.fixtures where name = 'bob');
+  v_check uuid;
+  v_entry uuid;
+begin
+  insert into public.citation_checks (
+    user_id, title, content, style, word_count, list_heading,
+    in_text_count, distinct_sources, reference_count, summary
+  )
+  values (
+    v_alice, 'Sleep and memory review', 'The document text.', 'apa7', 900,
+    'References', 4, 3, 2, 'Two entries need attention.'
+  )
+  returning id into v_check;
+
+  insert into public.citation_entries
+    (check_id, position, raw_text, first_author, year, has_link, cited)
+  values
+    (v_check, 0, 'Okonkwo, A., & Silva, M. (2021). Working memory. Journal, 44(2), 113-129.',
+     'okonkwo', '2021', true, true)
+  returning id into v_entry;
+
+  insert into public.citation_entries
+    (check_id, position, raw_text, first_author, year, has_link, cited)
+  values
+    (v_check, 1, 'Ferreira, L. (2020). Sleep architecture. Reviews, 8(4), 220-241.',
+     'ferreira', '2020', false, false);
+
+  -- Both halves of the report live in one table, distinguished by origin.
+  insert into public.citation_findings
+    (check_id, entry_id, position, origin, kind, severity, target_text, message, suggestion)
+  values
+    (v_check, null, 0, 'local', 'orphan_citation', 'error', '(Walker et al., 2007)',
+     'Cited in the text but not in the reference list.', 'Add an entry for it.'),
+    (v_check, v_entry, 1, 'model', 'format', 'warning',
+     'Okonkwo, A., & Silva, M. (2021). Working memory. Journal, 44(2), 113-129.',
+     'The journal title should carry headline capitalisation.', null);
+
+  perform wp_test.assert_eq(
+    (select count(*)::int from public.citation_findings where check_id = v_check),
+    2, 'a check stores both the counted and the assessed findings'
+  );
+  perform wp_test.assert_eq(
+    (select count(*)::int from public.citation_findings
+     where check_id = v_check and origin = 'local'),
+    1, 'the origin of each finding is recorded, not inferred'
+  );
+  perform wp_test.assert_eq(
+    (select status::text from public.citation_findings where position = 0),
+    'open', 'a finding starts open'
+  );
+
+  insert into public.citation_checks
+    (user_id, title, content, style, word_count)
+  values (v_bob, 'Bob''s essay', 'Other text.', 'mla9', 300);
+end $$;
+
+-- A finding cannot be positioned twice in the same check.
+do $$
+declare
+  v_check uuid := (select id from public.citation_checks where title = 'Sleep and memory review');
+  v_ok boolean;
+begin
+  begin
+    insert into public.citation_findings
+      (check_id, position, origin, kind, severity, message)
+    values (v_check, 0, 'local', 'orphan_citation', 'error', 'Duplicate position.');
+    v_ok := false;
+  exception when unique_violation then
+    v_ok := true;
+  end;
+  perform wp_test.assert(v_ok, 'two findings cannot share a position in one check');
+end $$;
+
+begin;
+  set local role authenticated;
+  set local request.jwt.claim.role = 'authenticated';
+
+  do $$
+  declare
+    v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+    v_id    uuid;
+  begin
+    execute format('set local request.jwt.claim.sub = %L', v_alice);
+
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.citation_checks), 1,
+      'a user sees only their own citation checks'
+    );
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.citation_entries), 2,
+      'entry visibility follows the parent check'
+    );
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.citation_findings), 2,
+      'finding visibility follows the parent check'
+    );
+
+    -- Working through the report is the user's own decision on their own work.
+    select id into v_id from public.citation_findings where position = 0;
+    update public.citation_findings set status = 'resolved' where id = v_id;
+
+    perform wp_test.assert_eq(
+      (select status::text from public.citation_findings where id = v_id),
+      'resolved', 'a user can mark a finding resolved'
+    );
+    perform wp_test.assert(
+      (select resolved_at from public.citation_findings where id = v_id) is not null,
+      'the server stamps the time it was resolved'
+    );
+
+    update public.citation_findings set status = 'open' where id = v_id;
+    perform wp_test.assert(
+      (select resolved_at from public.citation_findings where id = v_id) is null,
+      'reopening a finding clears the stamp'
+    );
+
+    -- ...but the finding itself is a record of what was found.
+    update public.citation_findings
+    set message = 'Nothing is wrong here',
+        severity = 'info',
+        origin = 'local',
+        target_text = 'rewritten',
+        suggestion = 'rewritten'
+    where id = v_id;
+
+    perform wp_test.assert_eq(
+      (select message from public.citation_findings where id = v_id),
+      'Cited in the text but not in the reference list.',
+      'a user cannot rewrite what the checker found'
+    );
+    perform wp_test.assert_eq(
+      (select severity::text from public.citation_findings where id = v_id),
+      'error', 'a user cannot downgrade a finding''s severity'
+    );
+    perform wp_test.assert_eq(
+      (select origin::text from public.citation_findings where position = 1),
+      'model', 'a user cannot relabel an assessed finding as a counted one'
+    );
+  end $$;
+
+  select wp_test.assert_denied(
+    $q$insert into public.citation_checks (user_id, title, content, style, word_count)
+       select id, 'Forged', 'x', 'apa7', 100 from wp_test.fixtures where name = 'alice'$q$,
+    'a user cannot create a citation check directly');
+  select wp_test.assert_denied(
+    $q$update public.citation_checks set reference_count = 99$q$,
+    'a user cannot change a check''s counts');
+  select wp_test.assert_denied(
+    $q$update public.citation_entries set raw_text = 'rewritten'$q$,
+    'a user cannot rewrite their parsed reference list');
+  select wp_test.assert_denied(
+    $q$insert into public.citation_findings
+         (check_id, position, origin, kind, severity, message)
+       select id, 99, 'local', 'orphan_citation', 'error', 'Invented'
+       from public.citation_checks limit 1$q$,
+    'a user cannot invent a finding');
+  select wp_test.assert_denied(
+    $q$delete from public.citation_findings$q$,
+    'a user cannot delete findings individually');
+commit;
+
+-- Deleting a check takes everything stored with it.
+begin;
+  set local role authenticated;
+  set local request.jwt.claim.role = 'authenticated';
+
+  do $$
+  declare v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+  begin
+    execute format('set local request.jwt.claim.sub = %L', v_alice);
+
+    delete from public.citation_checks;
+
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.citation_entries), 0,
+      'deleting a check cascades to its reference entries'
+    );
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.citation_findings), 0,
+      'deleting a check cascades to its findings'
+    );
+  end $$;
+commit;
+
+
+-- =============================================================================
+\echo '== 13. Cleanup =============================================================='
 -- =============================================================================
 
 do $$ begin

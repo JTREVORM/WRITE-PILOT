@@ -544,6 +544,114 @@ function check(condition, passed, failed) {
   await ctx.close();
 }
 
+// --- citation check result ----------------------------------------------------
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto(
+    `${BASE_URL}${process.env.CITATIONS_PATH ?? "/shell-preview/citations"}`,
+    { waitUntil: "networkidle" },
+  );
+
+  const body = await page.locator("body").innerText();
+
+  // The counts come from the real parser and matcher over the fixture: three
+  // works cited, three entries listed, one cited-but-not-listed (Walker), one
+  // listed-but-not-cited (Ferreira).
+  check(/Cited but not listed/.test(body), "the coverage summary names the gap it found");
+  check(
+    /Walker/.test(body),
+    "the source that is cited and never listed is named",
+  );
+  check(
+    /Ferreira/.test(body),
+    "the entry that is listed and never cited is named",
+  );
+  check(
+    /Years disagree/.test(body),
+    "a year that disagrees is reported separately from a missing source",
+  );
+
+  // The honesty rule this whole screen turns on.
+  check(
+    /not whether the sources exist/i.test(body),
+    "the screen says it does not verify that sources exist",
+  );
+  check(
+    /italics/i.test(body),
+    "the screen says what extraction cannot see",
+  );
+  check(
+    !/(turnitin|undetectable|bypass|guarantee)/i.test(body),
+    "no evasion or guarantee language on the citation screen",
+  );
+
+  // Counted and assessed must stay distinguishable.
+  check(
+    /Checked/.test(body) && /Assessed/.test(body),
+    "counted findings and assessed findings are labelled differently",
+  );
+
+  await page.getByRole("radio", { name: /^Checked/ }).click();
+  await page.waitForTimeout(200);
+  const afterFilter = await page.locator("body").innerText();
+  check(
+    /comparing your citations against your reference list/i.test(afterFilter),
+    "filtering to the counted half explains what that means",
+  );
+  check(
+    !/The article title uses headline capitalisation/.test(afterFilter),
+    "filtering to the counted half hides the assessed findings",
+  );
+
+  await page.getByRole("radio", { name: /^Assessed/ }).click();
+  await page.waitForTimeout(200);
+  check(
+    /The article title uses headline capitalisation/.test(
+      await page.locator("body").innerText(),
+    ),
+    "filtering to the assessed half shows them again",
+  );
+
+  await page.getByRole("radio", { name: /^All/ }).click();
+  await page.waitForTimeout(200);
+
+  // Working the report. There is no session behind this preview, so the server
+  // action redirects to sign-in; what is asserted here is the optimistic render
+  // that must happen first, because a checklist that waits on a round trip
+  // before ticking is a checklist nobody trusts.
+  const openBefore = (await page.locator("body").innerText()).match(
+    /(\d+) of (\d+) still open/,
+  );
+  check(Boolean(openBefore), "the report says how many findings are still open");
+
+  const target = Number(openBefore?.[1] ?? 0) - 1;
+  await page.getByRole("button", { name: "Fixed" }).first().click();
+
+  const ticked = await page
+    .waitForFunction(
+      (expected) =>
+        new RegExp(`${expected} of \\d+ still open`).test(document.body.innerText),
+      target,
+      { timeout: 3000 },
+    )
+    .then(() => true)
+    .catch(() => false);
+
+  check(
+    ticked,
+    `marking a finding fixed updates the open count immediately (${openBefore?.[1]} → ${target})`,
+  );
+
+  check(errors.length === 0, "no uncaught client errors on the citation screen",
+    `client errors: ${errors.slice(0, 2).join(" | ")}`);
+
+  await page.screenshot({ path: `${SHOT_DIR}/citation-check.png`, fullPage: true });
+  await ctx.close();
+}
+
 await browser.close();
 console.log(failures === 0 ? "\nInteraction checks passed." : `\n${failures} failed.`);
 process.exit(failures === 0 ? 0 : 1);

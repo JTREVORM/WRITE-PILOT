@@ -21,6 +21,7 @@ nor its own UI code for those decisions.
 | `migrations/20250104000000_grammar_checks.sql` | `grammar_checks`, `grammar_suggestions`, the status guard |
 | `migrations/20250105000000_naturalize.sql` | `naturalize_runs`, `naturalize_paragraphs` and their policies |
 | `migrations/20250106000000_grading.sql` | `rubrics`, `rubric_criteria`, `grades`, `grade_criteria`, the derived total |
+| `migrations/20250107000000_citations.sql` | `citation_checks`, `citation_entries`, `citation_findings`, the status guard |
 | `tests/database.test.sql` | Behavioural tests, including the RLS denial cases |
 
 ## Applying it
@@ -71,6 +72,9 @@ suite cleans up after itself and can be re-run. It covers:
   cannot overwrite it), correcting a criterion but not moving it to another
   rubric, grades being read-only to their owner, and a grade surviving the
   deletion of the rubric it was produced against
+- citation checks: marking a finding resolved and reopening it, the timestamp
+  being stamped server-side, and the guard that stops a user rewriting a
+  finding's message, severity or origin
 - **Row Level Security**: that a user cannot read another user's data, cannot
   raise their own credit balance, cannot grant themselves a role, cannot change
   their own plan, and cannot execute any privileged function
@@ -119,6 +123,14 @@ delete it; there is no update grant, because a grade a user could rewrite is not
 worth storing. Each grade snapshots the criterion names and maxima it was judged
 against, so deleting a rubric clears the link (`on delete set null`) without
 taking the grades with it.
+
+**A citation finding records how it was produced.** `citation_findings.origin`
+is `local` for the ones the server counted by comparing the text against the
+reference list, and `model` for the ones judged against a style's rules. The
+column guard pins it along with the message and the severity, so a user session
+can move a finding's status and nothing else — otherwise "mark as resolved"
+would be a way to rewrite what the checker found, and the stored report would
+stop being a record of anything.
 
 **Roles are not in the JWT.** They live in `user_roles` and are read per request,
 so revoking an admin takes effect immediately rather than at the next token

@@ -78,10 +78,10 @@ export const navigation: NavSection[] = [
       },
       {
         label: "Citation Checker",
-        href: "/tools/citations",
+        href: routes.citations,
         icon: "citations",
         description: "Check citations against APA, MLA, Chicago or Harvard",
-        available: false,
+        available: true,
       },
     ],
   },
@@ -164,10 +164,10 @@ export const quickActions: NavItem[] = [
   },
   {
     label: "Check Citations",
-    href: "/tools/citations",
+    href: routes.citations,
     icon: "citations",
     description: "Validate references and style",
-    available: false,
+    available: true,
   },
   {
     label: "Upload Document",
