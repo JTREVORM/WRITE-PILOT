@@ -1660,7 +1660,204 @@ commit;
 
 
 -- =============================================================================
-\echo '== 14. Cleanup =============================================================='
+\echo '== 14. Deep analysis and coaching ==========================================='
+-- =============================================================================
+
+do $$
+declare
+  v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+  v_bob   uuid := (select id from wp_test.fixtures where name = 'bob');
+  v_run   uuid;
+  v_ok    boolean;
+begin
+  insert into public.analysis_runs
+    (user_id, title, content, word_count, summary, carried_from)
+  values (
+    v_alice, 'Memory consolidation essay', 'The draft text.', 1240,
+    'A well-organised draft.',
+    jsonb_build_object('citations', jsonb_build_object('orphans', 2))
+  )
+  returning id into v_run;
+
+  -- Both halves of the list live in one table, distinguished by origin.
+  insert into public.improvement_actions
+    (analysis_id, position, origin, category, title, detail, impact, effort, priority_score)
+  values
+    (v_run, 0, 'measured', 'citations', 'Add reference entries for 2 cited sources',
+     'Your citation check found two.', 5, 2, 44),
+    (v_run, 1, 'advised', 'argument', 'Answer the strongest objection',
+     'Section three never engages it.', 5, 3, 41),
+    (v_run, 2, 'advised', 'clarity', 'Cut the methods recap',
+     'The discussion restates the methods.', 2, 2, 14);
+
+  perform wp_test.assert_eq(
+    (select count(*)::int from public.improvement_actions where analysis_id = v_run),
+    3, 'a review stores both the carried and the judged improvements'
+  );
+  perform wp_test.assert_eq(
+    (select origin::text from public.improvement_actions
+     where analysis_id = v_run and position = 0),
+    'measured', 'the origin of each improvement is recorded, not inferred'
+  );
+
+  -- The ratings the ordering is computed from are bounded by the schema.
+  begin
+    insert into public.improvement_actions
+      (analysis_id, position, origin, category, title, detail, impact, effort, priority_score)
+    values (v_run, 9, 'advised', 'clarity', 'Impossible', 'x', 9, 1, 87);
+    v_ok := false;
+  exception when check_violation then
+    v_ok := true;
+  end;
+  perform wp_test.assert(v_ok, 'an impact rating outside 1-5 is rejected');
+
+  insert into public.analysis_runs (user_id, title, content, word_count)
+  values (v_bob, 'Bob''s draft', 'Other text.', 400);
+end $$;
+
+begin;
+  set local role authenticated;
+  set local request.jwt.claim.role = 'authenticated';
+
+  do $$
+  declare
+    v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+    v_id    uuid;
+  begin
+    execute format('set local request.jwt.claim.sub = %L', v_alice);
+
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.analysis_runs), 1,
+      'a user sees only their own reviews'
+    );
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.improvement_actions), 3,
+      'improvement visibility follows the parent review'
+    );
+
+    -- The list is ordered by the score the server computed.
+    perform wp_test.assert_eq(
+      (select title from public.improvement_actions
+       order by priority_score desc, position limit 1),
+      'Add reference entries for 2 cited sources',
+      'the highest-scoring improvement comes first'
+    );
+
+    -- Working the list is the user's own decision on their own work.
+    select id into v_id from public.improvement_actions where position = 1;
+    update public.improvement_actions set status = 'done' where id = v_id;
+
+    perform wp_test.assert_eq(
+      (select status::text from public.improvement_actions where id = v_id),
+      'done', 'a user can tick an improvement off'
+    );
+    perform wp_test.assert(
+      (select resolved_at from public.improvement_actions where id = v_id) is not null,
+      'the server stamps the time it was finished'
+    );
+
+    update public.improvement_actions set status = 'open' where id = v_id;
+    perform wp_test.assert(
+      (select resolved_at from public.improvement_actions where id = v_id) is null,
+      'reopening an improvement clears the stamp'
+    );
+
+    -- ...but the advice itself, and its place in the order, are not the
+    -- user's to rewrite.
+    update public.improvement_actions
+    set title = 'Rewritten',
+        impact = 1,
+        priority_score = 1,
+        origin = 'measured',
+        coaching = 'The coach never said this'
+    where id = v_id;
+
+    perform wp_test.assert_eq(
+      (select title from public.improvement_actions where id = v_id),
+      'Answer the strongest objection',
+      'a user cannot rewrite what the review said'
+    );
+    perform wp_test.assert_eq(
+      (select priority_score from public.improvement_actions where id = v_id),
+      41, 'a user cannot re-score their own improvement list'
+    );
+    perform wp_test.assert_eq(
+      (select origin::text from public.improvement_actions where id = v_id),
+      'advised', 'a user cannot relabel advice as a measurement'
+    );
+    perform wp_test.assert(
+      (select coaching from public.improvement_actions where id = v_id) is null,
+      'a user cannot put words in the coach''s mouth'
+    );
+  end $$;
+
+  select wp_test.assert_denied(
+    $q$insert into public.analysis_runs (user_id, title, content, word_count)
+       select id, 'Forged', 'x', 200 from wp_test.fixtures where name = 'alice'$q$,
+    'a user cannot create a review directly');
+  select wp_test.assert_denied(
+    $q$update public.analysis_runs set summary = 'Rewritten'$q$,
+    'a user cannot rewrite a review''s summary');
+  select wp_test.assert_denied(
+    $q$insert into public.improvement_actions
+         (analysis_id, position, origin, category, title, detail, impact, effort, priority_score)
+       select id, 50, 'measured', 'argument', 'Invented', 'x', 5, 1, 47
+       from public.analysis_runs limit 1$q$,
+    'a user cannot invent an improvement');
+  select wp_test.assert_denied(
+    $q$delete from public.improvement_actions$q$,
+    'a user cannot delete improvements individually');
+commit;
+
+-- A review is kept with the document it read, and outlives it.
+do $$
+declare
+  v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+  v_doc   uuid;
+  v_run   uuid;
+begin
+  insert into public.documents (user_id, title, content, word_count)
+  values (v_alice, 'Reviewed draft', 'The draft text.', 1240)
+  returning id into v_doc;
+
+  insert into public.analysis_runs (user_id, document_id, title, content, word_count)
+  values (v_alice, v_doc, 'Review of the draft', 'The draft text.', 1240)
+  returning id into v_run;
+
+  delete from public.documents where id = v_doc;
+
+  perform wp_test.assert_eq(
+    (select count(*)::int from public.analysis_runs where id = v_run),
+    1, 'deleting a document keeps the review of it'
+  );
+  perform wp_test.assert(
+    (select document_id from public.analysis_runs where id = v_run) is null,
+    'the review''s document link is cleared rather than cascading'
+  );
+end $$;
+
+-- Deleting a review takes its list with it.
+begin;
+  set local role authenticated;
+  set local request.jwt.claim.role = 'authenticated';
+
+  do $$
+  declare v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+  begin
+    execute format('set local request.jwt.claim.sub = %L', v_alice);
+
+    delete from public.analysis_runs;
+
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.improvement_actions), 0,
+      'deleting a review cascades to its improvements'
+    );
+  end $$;
+commit;
+
+
+-- =============================================================================
+\echo '== 15. Cleanup =============================================================='
 -- =============================================================================
 
 do $$ begin

@@ -730,6 +730,143 @@ function check(condition, passed, failed) {
   await ctx.close();
 }
 
+// --- coaching review ----------------------------------------------------------
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto(
+    `${BASE_URL}${process.env.COACH_PATH ?? "/shell-preview/coach"}`,
+    { waitUntil: "networkidle" },
+  );
+
+  const body = await page.locator("body").innerText();
+
+  // The ordering is the feature, and it is computed by the real scorer over
+  // the fixture: the measured citation fix (impact 5, effort 2 -> 44) must
+  // outrank the advised argument change (5/3 -> 41), which must outrank the
+  // 2/2 tidy-up.
+  const headings = await page.locator("li h3").allInnerTexts();
+  check(
+    /Add reference entries/.test(headings[0] ?? ""),
+    `the highest-scoring improvement is first (got "${headings[0] ?? ""}")`,
+  );
+  const rank = (pattern) => headings.findIndex((h) => pattern.test(h));
+  check(
+    rank(/Answer the strongest objection/) > -1 &&
+      rank(/Answer the strongest objection/) < rank(/Move the scope statement/),
+    "a larger improvement outranks a smaller one further down",
+  );
+  // The two halves interleave by score rather than being grouped: an advised
+  // 4/1 sits above a measured 4/2.
+  check(
+    rank(/Move the scope statement/) < rank(/significant grammar/),
+    "measured and advised items are ordered together, not in blocks",
+  );
+  check(
+    /Do this first/.test(body),
+    "the top of the list is labelled, not just positioned",
+  );
+
+  // Measured and advised must stay distinguishable, as in the citation report.
+  check(
+    /Measured/.test(body) && /Advised/.test(body),
+    "carried findings and model advice are labelled differently",
+  );
+  check(
+    /carried from checks you had already run/.test(body),
+    "the page says which items came from checks already paid for",
+  );
+
+  // The standing qualification, and the lines this tool does not cross.
+  check(
+    /not a mark and not a rule/.test(body),
+    "the review says plainly that it is advice, not a mark",
+  );
+  // Scoped to the review itself: the navigation legitimately names the AI
+  // Detector, and the rule here is about what the coaching says.
+  const reviewText = await page.locator("main").innerText();
+  check(
+    !/(turnitin|undetectable|bypass|guarantee|detector)/i.test(reviewText),
+    "no detector or guarantee language in the review",
+  );
+
+  // A finished item is out of the way until asked for.
+  const openHeadings = await page.locator("li h3").count();
+  await page.getByRole("button", { name: /Show finished/ }).click();
+  await page.waitForTimeout(200);
+  const allHeadings = await page.locator("li h3").count();
+
+  check(
+    allHeadings === openHeadings + 1,
+    `finished items are hidden until asked for (${openHeadings} open, ${allHeadings} total)`,
+  );
+  check(
+    /Hide finished/.test(await page.locator("main").innerText()),
+    "the filter says what pressing it again does",
+  );
+
+  await page.getByRole("button", { name: /Hide finished/ }).click();
+  await page.waitForTimeout(200);
+  check(
+    (await page.locator("li h3").count()) === openHeadings,
+    "hiding them again restores the working list",
+  );
+
+  // Coaching already bought is shown rather than sold again.
+  check(
+    /From the writing coach/.test(body),
+    "an explanation already bought is shown in place",
+  );
+  const explainButtons = await page.getByRole("button", { name: /Explain this/ }).count();
+  check(
+    explainButtons === headings.length - 1,
+    `only the unexplained improvements offer coaching (${explainButtons} of ${headings.length} shown)`,
+  );
+  check(
+    /Explain this \(4 credits\)/.test(body),
+    "the coaching button says what it costs before it is pressed",
+  );
+
+  // Working the list: ticking an item off is optimistic and does not reshuffle.
+  const openBefore = (await page.locator("body").innerText()).match(
+    /(\d+) of (\d+) still to do/,
+  );
+  check(Boolean(openBefore), "the list says how many items are still to do");
+
+  const target = Number(openBefore?.[1] ?? 0) - 1;
+  await page.getByRole("button", { name: "Done" }).first().click();
+
+  const ticked = await page
+    .waitForFunction(
+      (expected) =>
+        new RegExp(`${expected} of \\d+ still to do`).test(document.body.innerText),
+      target,
+      { timeout: 3000 },
+    )
+    .then(() => true)
+    .catch(() => false);
+
+  check(
+    ticked,
+    `ticking an improvement off updates the count immediately (${openBefore?.[1]} → ${target})`,
+  );
+
+  const afterHeadings = await page.locator("li h3").allInnerTexts();
+  check(
+    afterHeadings.length === headings.length - 1 &&
+      afterHeadings[0] === headings[1],
+    "a finished item leaves the list without reshuffling what remains",
+  );
+
+  check(errors.length === 0, "no uncaught client errors in the review",
+    `client errors: ${errors.slice(0, 2).join(" | ")}`);
+
+  await page.screenshot({ path: `${SHOT_DIR}/coach-review.png`, fullPage: true });
+  await ctx.close();
+}
+
 await browser.close();
 console.log(failures === 0 ? "\nInteraction checks passed." : `\n${failures} failed.`);
 process.exit(failures === 0 ? 0 : 1);

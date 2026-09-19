@@ -77,6 +77,13 @@ export const navigation: NavSection[] = [
         available: true,
       },
       {
+        label: "Writing Coach",
+        href: routes.coach,
+        icon: "coach",
+        description: "A full review, ordered by what to do first",
+        available: true,
+      },
+      {
         label: "Citation Checker",
         href: routes.citations,
         icon: "citations",
@@ -160,6 +167,13 @@ export const quickActions: NavItem[] = [
     href: routes.grader,
     icon: "grader",
     description: "Estimate a grade from a rubric",
+    available: true,
+  },
+  {
+    label: "Review a Draft",
+    href: routes.coach,
+    icon: "coach",
+    description: "What to change, in order",
     available: true,
   },
   {

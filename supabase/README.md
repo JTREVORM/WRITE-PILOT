@@ -23,6 +23,7 @@ nor its own UI code for those decisions.
 | `migrations/20250106000000_grading.sql` | `rubrics`, `rubric_criteria`, `grades`, `grade_criteria`, the derived total |
 | `migrations/20250107000000_citations.sql` | `citation_checks`, `citation_entries`, `citation_findings`, the status guard |
 | `migrations/20250108000000_workspace.sql` | `documents`, `assignments`, `assignment_drafts`, the storage bucket and its policies |
+| `migrations/20250109000000_coaching.sql` | `analysis_runs`, `improvement_actions`, the priority guard |
 | `harness/00_harness.sql` | Stand-in for the Supabase schemas the migrations rely on, used by the test script |
 | `tests/database.test.sql` | Behavioural tests, including the RLS denial cases |
 
@@ -81,6 +82,10 @@ suite cleans up after itself and can be re-run. It covers:
   its owner's folder, renaming a document but not rewriting its text or its
   path, creating an assignment directly as the user, and the two-sided policy
   that stops a user attaching someone else's document as their own draft
+- reviews and improvements: ticking an improvement off and reopening it, and
+  the guard that stops a user rewriting the advice, re-scoring their own
+  priority list, relabelling advice as a measurement, or writing the coach's
+  explanation themselves
 - **Row Level Security**: that a user cannot read another user's data, cannot
   raise their own credit balance, cannot grant themselves a role, cannot change
   their own plan, and cannot execute any privileged function
@@ -156,6 +161,13 @@ join.
 `document_id` columns on the analysis tables are `on delete set null`. A user
 who removes a document has not asked to lose the grade they paid for, and each
 analysis already stores the text it read.
+
+**An improvement's priority is derived, not supplied.** `priority_score` is
+computed by the server from the impact and effort ratings and stored, so a run's
+ordering is fixed once made and can be ordered in the database. The column guard
+pins it along with the advice itself: a user session that could re-score its own
+list would have a list that means nothing, and one that could write `coaching`
+could put words in the tutor's mouth.
 
 **Roles are not in the JWT.** They live in `user_roles` and are read per request,
 so revoking an admin takes effect immediately rather than at the next token

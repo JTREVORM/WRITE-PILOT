@@ -10,17 +10,18 @@ professionals worldwide.
 
 ## Where the project stands
 
-**Phases 1–8 are complete.** Authentication, profiles, roles, plans,
+**Phases 1–9 are complete.** Authentication, profiles, roles, plans,
 subscriptions, the credit ledger, usage tracking and Row Level Security (Phase
 1); the streaming dashboard, notification centre, theme control and the rest of
 the application shell (Phase 2); the AI Detector, the provider layer and
 document text extraction (Phase 3); the Grammar Checker (Phase 4); Naturalize
 (Phase 5); the AI Rubric Grader (Phase 6); the Citation Checker (Phase 7); the
-document library and assignment workspace (Phase 8).
+document library and assignment workspace (Phase 8); the Writing Coach and its
+priority improvement system (Phase 9).
 
 Every tool and every workspace area in the navigation now links to a route that
-exists. What remains is the writing coach, and the commercial and administrative
-surfaces.
+exists. What remains is commercial and administrative: payments, the admin
+dashboard, a security and performance pass, and the public launch surfaces.
 
 ## Stack
 
@@ -95,6 +96,7 @@ src/
     citations/         Coverage figures, findings list, reference list, limits
     documents/         Library form, document actions, tool links, selection banner
     assignments/       Brief form, draft manager
+    coach/             Improvement list, priority bands, disclaimer
   lib/
     env/               Zod-validated environment, split public vs server-only
     theme/             Theme preference: cookie, server read, server action
@@ -107,6 +109,7 @@ src/
     grading/           AI Grader: rubric normalisation, scoring, bands, prompt
     citations/         Citation Checker: parsing, cross-matching, merging, prompt
     assignments/       Assignments and their drafts
+    coach/             Writing Coach: priority scoring, carried signals, prompts
     documents/         Library, storage paths, signed URLs, text extraction
     supabase/          Browser, server, proxy and service-role clients
     auth/              Sessions, role guards, server actions, provisioning
@@ -382,6 +385,45 @@ the document must both belong to the caller. Draft versions are numbered by the
 server in the order they were attached, so the list is a record of how the work
 progressed rather than something a client can renumber.
 
+### How the Writing Coach works
+
+Every other tool answers one question about a draft. This one answers "what
+should I do next", which is the question someone with one evening before a
+deadline actually has. Its output is therefore a list to work through, not a
+report to read.
+
+**The ordering is ours.** A model asked to review a document will return twenty
+things in the order it noticed them, which is not advice. So it judges two
+things per improvement — how much the work improves if this is done, and how
+much work it is — and the arithmetic that turns those into a rank happens in a
+pure module with tests. Impact dominates and effort breaks ties: between a large
+improvement that takes an hour and a trivial one that takes a minute, the large
+one is still the better use of the hour. A model that also volunteered a
+priority would be scoring its own homework.
+
+**It reads what you have already paid for.** By the time someone asks for a full
+review they have often run a grammar check, a citation check, maybe a grade.
+Those are facts about this document, so they are carried forward as
+improvements — "add reference entries for the two cited sources that are not in
+your list" — and the model is told not to repeat them. Each item is labelled
+**Measured** or **Advised**, the same distinction the Citation Checker makes,
+and for the same reason.
+
+**One signal is deliberately not carried: the AI Detector's likelihood.**
+Turning that number into a to-do list would be building the "make your writing
+undetectable" product, whatever the wording on the button. A detection estimate
+is information about how a text reads, not an instruction to change it, and the
+coach never treats it as one. Both prompts also forbid commenting on whether
+the writing appears AI-assisted.
+
+**Coaching is priced per improvement.** "What should I do" and "I don't
+understand what you mean by that" are different questions, so the review
+produces the list and the coach explains any one item on it for a separate,
+smaller charge. An explanation already bought is handed back without charging
+again. The tutor is told to teach the principle and demonstrate it on one of the
+writer's own sentences, never to rewrite sections — the point is that they can
+do it again next time without paying for it.
+
 ### Theme
 
 Light, dark or follow-the-system, stored in a cookie and rendered into the HTML
@@ -446,8 +488,8 @@ across every surface.
 | 6 | AI Rubric Grader | **Complete** |
 | 7 | Citation Checker | **Complete** |
 | 8 | Document and assignment workspaces | **Complete** |
-| 9 | Writing Coach and priority improvements | Next |
-| 10 | Subscriptions, payments, plan enforcement | Planned |
+| 9 | Writing Coach and priority improvements | **Complete** |
+| 10 | Subscriptions, payments, plan enforcement | Next |
 | 11 | Admin dashboard and analytics | Planned |
 | 12 | Security, testing, optimisation | Planned |
 | 13 | Landing page, SEO, legal, launch | Planned |

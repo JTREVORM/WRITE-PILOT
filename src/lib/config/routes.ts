@@ -26,6 +26,7 @@ export const routes = {
   naturalize: "/tools/naturalize",
   grader: "/tools/grader",
   citations: "/tools/citations",
+  coach: "/tools/coach",
   documents: "/documents",
   assignments: "/assignments",
   usage: "/usage",

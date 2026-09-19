@@ -318,6 +318,56 @@ export type GradeCriterionRow = {
   improvements: Json;
 };
 
+export type ImprovementCategoryValue =
+  | "structure"
+  | "argument"
+  | "evidence"
+  | "clarity"
+  | "mechanics"
+  | "citations"
+  | "formatting";
+
+export type ImprovementOrigin = "measured" | "advised";
+export type ImprovementStatus = "open" | "done" | "dismissed";
+
+export type AnalysisRunRow = {
+  id: string;
+  user_id: string;
+  document_id: string | null;
+  assignment_id: string | null;
+  title: string;
+  source: ScanSource;
+  source_filename: string | null;
+  content: string;
+  word_count: number;
+  summary: string | null;
+  carried_from: Json;
+  provider: string | null;
+  model: string | null;
+  duration_ms: number | null;
+  credits_charged: number;
+  credit_transaction_id: string | null;
+  created_at: string;
+};
+
+export type ImprovementActionRow = {
+  id: string;
+  analysis_id: string;
+  position: number;
+  origin: ImprovementOrigin;
+  category: ImprovementCategoryValue;
+  title: string;
+  detail: string;
+  location: string | null;
+  impact: number;
+  effort: number;
+  priority_score: number;
+  status: ImprovementStatus;
+  resolved_at: string | null;
+  coaching: string | null;
+  coached_at: string | null;
+};
+
 export type AssignmentStatus = "planning" | "drafting" | "submitted";
 
 export type DocumentRow = {
@@ -626,6 +676,22 @@ export type Database = {
       naturalize_paragraphs: Table<
         NaturalizeParagraphRow,
         "run_id" | "position" | "original_text" | "improved_text"
+      >;
+      analysis_runs: Table<
+        AnalysisRunRow,
+        "user_id" | "title" | "content" | "word_count"
+      >;
+      improvement_actions: Table<
+        ImprovementActionRow,
+        | "analysis_id"
+        | "position"
+        | "origin"
+        | "category"
+        | "title"
+        | "detail"
+        | "impact"
+        | "effort"
+        | "priority_score"
       >;
       documents: Table<
         DocumentRow,
