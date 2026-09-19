@@ -244,6 +244,49 @@ export type SuggestionSeverity = "correction" | "improvement" | "consideration";
 
 export type SuggestionStatus = "pending" | "accepted" | "rejected";
 
+export type NaturalizeModeValue =
+  | "natural"
+  | "academic"
+  | "professional"
+  | "formal"
+  | "simple"
+  | "conversational"
+  | "concise";
+
+export type NaturalizeRunRow = {
+  id: string;
+  user_id: string;
+  title: string;
+  source: ScanSource;
+  source_filename: string | null;
+  mode: NaturalizeModeValue;
+  content: string;
+  improved: string;
+  word_count: number;
+  improved_word_count: number;
+  character_count: number;
+  summary: string | null;
+  readability_before: Json;
+  readability_after: Json;
+  integrity_findings: Json;
+  provider: string | null;
+  model: string | null;
+  duration_ms: number | null;
+  credits_charged: number;
+  credit_transaction_id: string | null;
+  created_at: string;
+};
+
+export type NaturalizeParagraphRow = {
+  id: string;
+  run_id: string;
+  position: number;
+  original_text: string;
+  improved_text: string;
+  note: string | null;
+  changed: boolean;
+};
+
 export type GrammarCheckRow = {
   id: string;
   user_id: string;
@@ -391,6 +434,19 @@ export type Database = {
         GrammarCheckRow,
         "user_id" | "title" | "content" | "word_count" | "character_count"
       >;
+      naturalize_runs: Table<
+        NaturalizeRunRow,
+        | "user_id"
+        | "title"
+        | "content"
+        | "improved"
+        | "word_count"
+        | "character_count"
+      >;
+      naturalize_paragraphs: Table<
+        NaturalizeParagraphRow,
+        "run_id" | "position" | "original_text" | "improved_text"
+      >;
       grammar_suggestions: Table<
         GrammarSuggestionRow,
         | "check_id"
@@ -487,6 +543,7 @@ export type Database = {
       suggestion_category: SuggestionCategory;
       suggestion_severity: SuggestionSeverity;
       suggestion_status: SuggestionStatus;
+      naturalize_mode: NaturalizeModeValue;
     };
     CompositeTypes: Record<string, never>;
   };

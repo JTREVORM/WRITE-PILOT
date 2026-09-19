@@ -931,7 +931,124 @@ do $$ begin
 end $$;
 
 -- =============================================================================
-\echo '== 10. Cleanup =============================================================='
+\echo '== 10. Naturalize =========================================================='
+-- =============================================================================
+
+do $$
+declare
+  v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+  v_bob   uuid := (select id from wp_test.fixtures where name = 'bob');
+  v_run   uuid;
+begin
+  insert into public.naturalize_runs (
+    user_id, title, mode, content, improved,
+    word_count, improved_word_count, character_count,
+    integrity_findings
+  )
+  values (
+    v_alice, 'Conference abstract', 'academic',
+    E'In order to demonstrate this we ran a study.\n\nThe results were good.',
+    E'To demonstrate this, we ran a study.\n\nThe results were compelling.',
+    13, 11, 66,
+    '[{"kind":"number","value":"47%","message":"check"}]'::jsonb
+  )
+  returning id into v_run;
+
+  insert into public.naturalize_paragraphs
+    (run_id, position, original_text, improved_text, note, changed)
+  values
+    (v_run, 0, 'In order to demonstrate this we ran a study.',
+     'To demonstrate this, we ran a study.', 'Cut padding.', true),
+    (v_run, 1, 'The results were good.',
+     'The results were compelling.', 'Sharper word choice.', true);
+
+  insert into public.naturalize_runs
+    (user_id, title, content, improved, word_count, character_count)
+  values (v_bob, 'Bob''s notes', 'Bob wrote this.', 'Bob wrote this.', 3, 15);
+
+  perform wp_test.assert_eq(
+    (select count(*)::int from public.naturalize_paragraphs where run_id = v_run),
+    2, 'paragraph pairs are stored'
+  );
+  perform wp_test.assert_eq(
+    (select jsonb_array_length(integrity_findings) from public.naturalize_runs where id = v_run),
+    1, 'integrity findings are stored with the run'
+  );
+  perform wp_test.assert(
+    (select content from public.naturalize_runs where id = v_run) like 'In order to%',
+    'the original is stored unchanged alongside the rewrite'
+  );
+end $$;
+
+begin;
+  set local role authenticated;
+  set local request.jwt.claim.role = 'authenticated';
+
+  do $$
+  declare v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+  begin
+    execute format('set local request.jwt.claim.sub = %L', v_alice);
+
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.naturalize_runs), 1,
+      'a user sees only their own rewrites'
+    );
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.naturalize_paragraphs), 2,
+      'paragraph visibility follows the parent run'
+    );
+    perform wp_test.assert(
+      not exists (select 1 from public.naturalize_runs where title like 'Bob%'),
+      'a user cannot read another user''s rewrite'
+    );
+  end $$;
+
+  select wp_test.assert_denied(
+    $q$insert into public.naturalize_runs
+         (user_id, title, content, improved, word_count, character_count)
+       select id, 'Forged', 'x', 'y', 1, 1 from wp_test.fixtures where name = 'alice'$q$,
+    'a user cannot create a rewrite directly');
+  select wp_test.assert_denied(
+    $q$update public.naturalize_runs set improved = 'tampered'$q$,
+    'a user cannot rewrite the improved text');
+  select wp_test.assert_denied(
+    $q$update public.naturalize_runs set integrity_findings = '[]'::jsonb$q$,
+    'a user cannot clear the integrity findings');
+  select wp_test.assert_denied(
+    'delete from public.naturalize_paragraphs',
+    'a user cannot delete paragraph pairs independently');
+commit;
+
+begin;
+  set local role authenticated;
+  set local request.jwt.claim.role = 'authenticated';
+
+  do $$
+  declare
+    v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+    v_run   uuid;
+  begin
+    execute format('set local request.jwt.claim.sub = %L', v_alice);
+    select id into v_run from public.naturalize_runs limit 1;
+    delete from public.naturalize_runs where id = v_run;
+
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.naturalize_runs), 0,
+      'a user can delete their own rewrite'
+    );
+  end $$;
+commit;
+
+do $$ begin
+  perform wp_test.assert_eq(
+    (select count(*)::int from public.naturalize_paragraphs), 0,
+    'deleting a rewrite cascades to its paragraph pairs'
+  );
+end $$;
+
+
+-- =============================================================================
+\echo '== 11. Cleanup =============================================================='
 -- =============================================================================
 
 do $$ begin

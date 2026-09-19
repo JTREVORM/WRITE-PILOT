@@ -64,10 +64,10 @@ export const navigation: NavSection[] = [
       },
       {
         label: "Naturalize",
-        href: "/tools/naturalize",
+        href: routes.naturalize,
         icon: "naturalize",
         description: "Improve flow and readability, keep your meaning",
-        available: false,
+        available: true,
       },
       {
         label: "AI Grader",
@@ -150,10 +150,10 @@ export const quickActions: NavItem[] = [
   },
   {
     label: "Naturalize",
-    href: "/tools/naturalize",
+    href: routes.naturalize,
     icon: "naturalize",
     description: "Improve flow and readability",
-    available: false,
+    available: true,
   },
   {
     label: "Grade Assignment",

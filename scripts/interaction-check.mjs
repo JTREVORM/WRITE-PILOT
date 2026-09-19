@@ -384,6 +384,80 @@ function check(condition, passed, failed) {
   await ctx.close();
 }
 
+// --- naturalize comparison ----------------------------------------------------
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto(
+    `${BASE_URL}${process.env.NATURALIZE_PATH ?? "/shell-preview/naturalize"}`,
+    { waitUntil: "networkidle" },
+  );
+
+  const body = await page.locator("body").innerText();
+
+  // The fixture drops a citation, so the real integrity check must report it.
+  check(
+    /1 thing to check/i.test(body),
+    "the integrity panel reports the dropped citation",
+  );
+  check(
+    /Walker et al\., 2007/.test(body),
+    "the finding names the citation that went missing",
+  );
+
+  // The diff is produced by the real word-level algorithm.
+  check(
+    (await page.locator("del").count()) > 0 &&
+      (await page.locator("ins").count()) > 0,
+    "removals and additions are both marked",
+  );
+  check(
+    (await page.locator("del").allInnerTexts()).some((t) => /In order/.test(t)),
+    "a removal lands on the padding that was cut",
+  );
+
+  // Removals use strikethrough and additions a background, so the comparison
+  // does not depend on telling red from green.
+  const delDecoration = await page
+    .locator("del")
+    .first()
+    .evaluate((el) => getComputedStyle(el).textDecorationLine);
+  check(
+    delDecoration.includes("line-through"),
+    `removals carry a non-colour cue (got "${delDecoration}")`,
+  );
+
+  // Three views of the same rewrite.
+  await page.getByRole("radio", { name: /Side by side/ }).click();
+  await page.waitForTimeout(200);
+  check(
+    /Original[\s\S]*Improved/.test(await page.locator("body").innerText()),
+    "side-by-side view shows both versions",
+  );
+
+  await page.getByRole("radio", { name: /Improved only/ }).click();
+  await page.waitForTimeout(200);
+  check(
+    (await page.locator("del").count()) === 0,
+    "improved-only view drops the diff marks",
+  );
+
+  await page.getByRole("radio", { name: /^Changes$/ }).click();
+  await page.waitForTimeout(200);
+  check(
+    (await page.locator("del").count()) > 0,
+    "switching back restores the changes view",
+  );
+
+  check(errors.length === 0, "no uncaught client errors in the comparison",
+    `client errors: ${errors.slice(0, 2).join(" | ")}`);
+
+  await page.screenshot({ path: `${SHOT_DIR}/naturalize-comparison.png`, fullPage: true });
+  await ctx.close();
+}
+
 await browser.close();
 console.log(failures === 0 ? "\nInteraction checks passed." : `\n${failures} failed.`);
 process.exit(failures === 0 ? 0 : 1);

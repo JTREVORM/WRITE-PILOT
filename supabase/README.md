@@ -19,6 +19,7 @@ nor its own UI code for those decisions.
 | `migrations/20250102000000_notifications_guard.sql` | Column guard for user-visible notification updates |
 | `migrations/20250103000000_ai_scans.sql` | `ai_scans`, `ai_scan_segments` and their policies |
 | `migrations/20250104000000_grammar_checks.sql` | `grammar_checks`, `grammar_suggestions`, the status guard |
+| `migrations/20250105000000_naturalize.sql` | `naturalize_runs`, `naturalize_paragraphs` and their policies |
 | `tests/database.test.sql` | Behavioural tests, including the RLS denial cases |
 
 ## Applying it
@@ -63,6 +64,8 @@ suite cleans up after itself and can be re-run. It covers:
   and the cascade from a scan to its paragraph segments
 - grammar checks: accepting and dismissing a suggestion, and the guard that
   stops a user rewriting what a suggestion would insert
+- naturalize runs: owner-only reads, no client writes (including the integrity
+  findings), deletion, and the cascade to paragraph pairs
 - **Row Level Security**: that a user cannot read another user's data, cannot
   raise their own credit balance, cannot grant themselves a role, cannot change
   their own plan, and cannot execute any privileged function

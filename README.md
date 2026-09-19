@@ -10,15 +10,16 @@ professionals worldwide.
 
 ## Where the project stands
 
-**Phases 1–4 are complete.** Authentication, profiles, roles, plans,
+**Phases 1–5 are complete.** Authentication, profiles, roles, plans,
 subscriptions, the credit ledger, usage tracking and Row Level Security (Phase
 1); the streaming dashboard, notification centre, theme control and the rest of
 the application shell (Phase 2); the AI Detector, the provider layer and
-document text extraction (Phase 3); the Grammar Checker (Phase 4).
+document text extraction (Phase 3); the Grammar Checker (Phase 4); Naturalize
+(Phase 5).
 
-The remaining tools — naturalize, grader, citations — arrive in later phases.
-They are visible in the navigation marked "Soon" rather than linking to routes
-that do not exist.
+The remaining tools — the AI Grader and the Citation Checker — arrive in later
+phases. They are visible in the navigation marked "Soon" rather than linking to
+routes that do not exist.
 
 ## Stack
 
@@ -88,6 +89,7 @@ src/
     dashboard/         Streamed sections, stat cards, quick actions, setup notice
     detection/         Likelihood meter, paragraph view, signals, scan form
     grammar/           Interactive workspace, readability panel, check form
+    naturalize/        Comparison views, word diff, integrity panel, mode picker
   lib/
     env/               Zod-validated environment, split public vs server-only
     theme/             Theme preference: cookie, server read, server action
@@ -96,6 +98,7 @@ src/
     text/              Sentence and paragraph segmentation, shared by features
     detection/         AI Detector: signals, scoring, prompt, orchestration
     grammar/           Grammar Checker: readability, locating, applying, prompt
+    naturalize/        Naturalize: modes, word diff, integrity checks, prompt
     documents/         Upload text extraction (PDF, DOCX, TXT)
     supabase/          Browser, server, proxy and service-role clients
     auth/              Sessions, role guards, server actions, provisioning
@@ -229,6 +232,37 @@ regional spelling, the serial comma, contractions, technical terms and quoted
 material are all left alone. A checker that flattens a writer's voice into house
 style is worse than one that finds fewer issues.
 
+### How Naturalize works
+
+Seven modes, because "better" depends on what the writing is for — the same
+paragraph improved for a supervisor reads differently from one improved for a
+general audience. Each mode's guidance lives beside its interface label so the
+two cannot drift apart.
+
+The model rewrites **numbered paragraphs** and returns them under the same
+numbers. Pairing by index rather than by matching text means the comparison
+always lines a rewrite up against what the writer actually wrote, and a response
+that reshapes the document is detectable. A paragraph the model does not return
+falls back to the original: leaving the writer's own words in place is always
+safer than dropping them.
+
+**The comparison is a real word-level diff**, not two blocks of text side by
+side. It is a longest-common-subsequence over tokens that carry their own
+whitespace, so either side reassembles byte for byte — a property the tests
+assert directly, because a comparison that shows text present in neither version
+is worse than no comparison.
+
+**Meaning preservation is checked, not promised.** After every rewrite the
+result is compared against the original for figures, citations, quotations and
+links. Anything missing is reported to the user, prominently, with what to do
+about it. The scope is deliberately narrow — these are unambiguous to detect and
+consequential to lose, whereas flagging every proper noun would bury the
+findings that matter. A rewrite that keeps almost none of the original wording
+is also flagged, except in the modes that are explicitly meant to cut.
+
+Both versions are kept. The original is never replaced, because the whole point
+is that the writer chooses which one to keep.
+
 ### Theme
 
 Light, dark or follow-the-system, stored in a cookie and rendered into the HTML
@@ -289,8 +323,9 @@ across every surface.
 | 2 | Dashboard and application shell | **Complete** |
 | 3 | AI Detector | **Complete** |
 | 4 | Grammar Checker | **Complete** |
-| 5 | Naturalize | Next |
-| 6–7 | AI Grader, Citation Checker | Planned |
+| 5 | Naturalize | **Complete** |
+| 6 | AI Rubric Grader | Next |
+| 7 | Citation Checker | Planned |
 | 8 | Document and assignment workspaces | Planned |
 | 9 | Writing Coach and priority improvements | Planned |
 | 10 | Subscriptions, payments, plan enforcement | Planned |
