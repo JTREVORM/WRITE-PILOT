@@ -1048,7 +1048,209 @@ end $$;
 
 
 -- =============================================================================
-\echo '== 11. Cleanup =============================================================='
+\echo '== 11. Rubrics and grades =================================================='
+-- =============================================================================
+
+do $$
+declare
+  v_alice  uuid := (select id from wp_test.fixtures where name = 'alice');
+  v_bob    uuid := (select id from wp_test.fixtures where name = 'bob');
+  v_rubric uuid;
+  v_grade  uuid;
+begin
+  insert into public.rubrics (user_id, title, raw_text)
+  values (v_alice, 'CS 1102 Assignment 1', 'Introduction 10; Argument 20; Evidence 20')
+  returning id into v_rubric;
+
+  insert into public.rubric_criteria (rubric_id, position, name, max_points)
+  values
+    (v_rubric, 0, 'Introduction', 10),
+    (v_rubric, 1, 'Argument', 20),
+    (v_rubric, 2, 'Evidence', 20);
+
+  -- The header total is derived by a trigger, never written by application code.
+  perform wp_test.assert_eq(
+    (select total_points from public.rubrics where id = v_rubric),
+    50::numeric, 'rubric total is summed from its criteria'
+  );
+
+  insert into public.grades (
+    user_id, rubric_id, rubric_title, title, content, word_count,
+    estimated_points, max_points, summary
+  )
+  values (
+    v_alice, v_rubric, 'CS 1102 Assignment 1', 'Draft 2',
+    'The submitted essay text.', 500, 39, 50, 'Solid overall.'
+  )
+  returning id into v_grade;
+
+  insert into public.grade_criteria
+    (grade_id, position, name, awarded_points, max_points, explanation)
+  values
+    (v_grade, 0, 'Introduction', 8, 10, 'Clear framing.'),
+    (v_grade, 1, 'Argument', 16, 20, 'Counter-position is thin.'),
+    (v_grade, 2, 'Evidence', 15, 20, 'Two claims uncited.');
+
+  insert into public.rubrics (user_id, title, raw_text)
+  values (v_bob, 'Bob''s rubric', 'Something else');
+
+  perform wp_test.assert_eq(
+    (select count(*)::int from public.grade_criteria where grade_id = v_grade),
+    3, 'the criterion breakdown is stored'
+  );
+end $$;
+
+-- The schema refuses a score above its maximum, and a total above the rubric's.
+do $$
+declare
+  v_grade uuid := (select id from public.grades limit 1);
+  v_ok boolean;
+begin
+  begin
+    insert into public.grade_criteria
+      (grade_id, position, name, awarded_points, max_points)
+    values (v_grade, 9, 'Impossible', 30, 20);
+    v_ok := false;
+  exception when check_violation then
+    v_ok := true;
+  end;
+  perform wp_test.assert(v_ok, 'a criterion cannot score above its maximum');
+
+  begin
+    insert into public.grades
+      (user_id, title, content, word_count, estimated_points, max_points)
+    select id, 'Impossible', 'x', 10, 80, 50
+    from wp_test.fixtures where name = 'alice';
+    v_ok := false;
+  exception when check_violation then
+    v_ok := true;
+  end;
+  perform wp_test.assert(v_ok, 'a grade cannot exceed its maximum');
+end $$;
+
+-- Deleting a rubric must not take the grades produced from it.
+do $$
+declare
+  v_bob uuid := (select id from wp_test.fixtures where name = 'bob');
+begin
+  delete from public.rubrics where user_id = v_bob;
+  perform wp_test.assert_eq(
+    (select count(*)::int from public.rubrics), 1,
+    'another user''s rubric is deletable independently'
+  );
+end $$;
+
+begin;
+  set local role authenticated;
+  set local request.jwt.claim.role = 'authenticated';
+
+  do $$
+  declare
+    v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+    v_id    uuid;
+  begin
+    execute format('set local request.jwt.claim.sub = %L', v_alice);
+
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.rubrics), 1,
+      'a user sees only their own rubrics'
+    );
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.grade_criteria), 3,
+      'breakdown visibility follows the parent grade'
+    );
+
+    -- Correcting a misread criterion is the user's own decision.
+    select id into v_id from public.rubric_criteria where position = 0;
+    update public.rubric_criteria set name = 'Opening', max_points = 15 where id = v_id;
+
+    perform wp_test.assert_eq(
+      (select name from public.rubric_criteria where id = v_id),
+      'Opening', 'a user can correct a criterion name'
+    );
+    perform wp_test.assert_eq(
+      (select total_points from public.rubrics limit 1),
+      55::numeric, 'the rubric total re-sums after an edit'
+    );
+
+    -- ...but not move it onto a different rubric.
+    update public.rubric_criteria
+    set rubric_id = extensions.gen_random_uuid(), position = 99
+    where id = v_id;
+
+    perform wp_test.assert_eq(
+      (select position from public.rubric_criteria where id = v_id),
+      0, 'a user cannot move a criterion to another rubric'
+    );
+
+    -- The rubric's derived total is not user-writable.
+    update public.rubrics set title = 'Renamed', total_points = 9999;
+    perform wp_test.assert_eq(
+      (select title from public.rubrics limit 1), 'Renamed',
+      'a user can rename their rubric'
+    );
+    perform wp_test.assert_eq(
+      (select total_points from public.rubrics limit 1), 55::numeric,
+      'a user cannot overwrite the derived total'
+    );
+  end $$;
+
+  select wp_test.assert_denied(
+    $q$insert into public.rubrics (user_id, title, raw_text)
+       select id, 'Forged', 'x' from wp_test.fixtures where name = 'alice'$q$,
+    'a user cannot create a rubric directly');
+  select wp_test.assert_denied(
+    $q$update public.grades set estimated_points = 50$q$,
+    'a user cannot change their own grade');
+  select wp_test.assert_denied(
+    $q$update public.grade_criteria set awarded_points = 20$q$,
+    'a user cannot change a criterion score');
+  select wp_test.assert_denied(
+    $q$insert into public.rubric_criteria (rubric_id, position, name, max_points)
+       select id, 50, 'Invented', 10 from public.rubrics limit 1$q$,
+    'a user cannot invent a criterion');
+commit;
+
+-- A grade outlives the rubric it came from.
+begin;
+  set local role authenticated;
+  set local request.jwt.claim.role = 'authenticated';
+
+  do $$
+  declare v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+  begin
+    execute format('set local request.jwt.claim.sub = %L', v_alice);
+
+    delete from public.rubrics;
+
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.grades), 1,
+      'deleting a rubric keeps the grades produced from it'
+    );
+    perform wp_test.assert(
+      (select rubric_id from public.grades limit 1) is null,
+      'the grade''s rubric link is cleared rather than cascading'
+    );
+    perform wp_test.assert_eq(
+      (select rubric_title from public.grades limit 1), 'CS 1102 Assignment 1',
+      'the grade still names the rubric it was judged against'
+    );
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.grade_criteria), 3,
+      'the breakdown survives the rubric'
+    );
+
+    delete from public.grades;
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.grade_criteria), 0,
+      'deleting a grade cascades to its breakdown'
+    );
+  end $$;
+commit;
+
+
+-- =============================================================================
+\echo '== 12. Cleanup =============================================================='
 -- =============================================================================
 
 do $$ begin

@@ -253,6 +253,70 @@ export type NaturalizeModeValue =
   | "conversational"
   | "concise";
 
+export type RubricRow = {
+  id: string;
+  user_id: string;
+  title: string;
+  source: ScanSource;
+  source_filename: string | null;
+  raw_text: string;
+  total_points: number;
+  notes: string | null;
+  provider: string | null;
+  model: string | null;
+  credits_charged: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type RubricCriterionRow = {
+  id: string;
+  rubric_id: string;
+  position: number;
+  name: string;
+  description: string | null;
+  max_points: number;
+};
+
+export type GradeRow = {
+  id: string;
+  user_id: string;
+  rubric_id: string | null;
+  rubric_title: string | null;
+  title: string;
+  source: ScanSource;
+  source_filename: string | null;
+  content: string;
+  instructions: string | null;
+  word_count: number;
+  estimated_points: number;
+  max_points: number;
+  summary: string | null;
+  overall_strengths: Json;
+  overall_improvements: Json;
+  provider: string | null;
+  model: string | null;
+  duration_ms: number | null;
+  credits_charged: number;
+  credit_transaction_id: string | null;
+  created_at: string;
+};
+
+export type GradeCriterionRow = {
+  id: string;
+  grade_id: string;
+  rubric_criterion_id: string | null;
+  position: number;
+  name: string;
+  awarded_points: number;
+  max_points: number;
+  explanation: string | null;
+  strengths: Json;
+  weaknesses: Json;
+  missing: Json;
+  improvements: Json;
+};
+
 export type NaturalizeRunRow = {
   id: string;
   user_id: string;
@@ -433,6 +497,23 @@ export type Database = {
       grammar_checks: Table<
         GrammarCheckRow,
         "user_id" | "title" | "content" | "word_count" | "character_count"
+      >;
+      rubrics: Table<RubricRow, "user_id" | "title" | "raw_text">;
+      rubric_criteria: Table<
+        RubricCriterionRow,
+        "rubric_id" | "position" | "name" | "max_points"
+      >;
+      grades: Table<
+        GradeRow,
+        "user_id" | "title" | "content" | "word_count"
+      >;
+      grade_criteria: Table<
+        GradeCriterionRow,
+        | "grade_id"
+        | "position"
+        | "name"
+        | "awarded_points"
+        | "max_points"
       >;
       naturalize_runs: Table<
         NaturalizeRunRow,

@@ -10,16 +10,15 @@ professionals worldwide.
 
 ## Where the project stands
 
-**Phases 1–5 are complete.** Authentication, profiles, roles, plans,
+**Phases 1–6 are complete.** Authentication, profiles, roles, plans,
 subscriptions, the credit ledger, usage tracking and Row Level Security (Phase
 1); the streaming dashboard, notification centre, theme control and the rest of
 the application shell (Phase 2); the AI Detector, the provider layer and
 document text extraction (Phase 3); the Grammar Checker (Phase 4); Naturalize
-(Phase 5).
+(Phase 5); the AI Rubric Grader (Phase 6).
 
-The remaining tools — the AI Grader and the Citation Checker — arrive in later
-phases. They are visible in the navigation marked "Soon" rather than linking to
-routes that do not exist.
+The Citation Checker arrives in a later phase. It is visible in the navigation
+marked "Soon" rather than linking to a route that does not exist.
 
 ## Stack
 
@@ -90,6 +89,7 @@ src/
     detection/         Likelihood meter, paragraph view, signals, scan form
     grammar/           Interactive workspace, readability panel, check form
     naturalize/        Comparison views, word diff, integrity panel, mode picker
+    grading/           Grade meter, criterion breakdown, rubric editor, disclaimer
   lib/
     env/               Zod-validated environment, split public vs server-only
     theme/             Theme preference: cookie, server read, server action
@@ -99,6 +99,7 @@ src/
     detection/         AI Detector: signals, scoring, prompt, orchestration
     grammar/           Grammar Checker: readability, locating, applying, prompt
     naturalize/        Naturalize: modes, word diff, integrity checks, prompt
+    grading/           AI Grader: rubric normalisation, scoring, bands, prompt
     documents/         Upload text extraction (PDF, DOCX, TXT)
     supabase/          Browser, server, proxy and service-role clients
     auth/              Sessions, role guards, server actions, provisioning
@@ -263,6 +264,42 @@ is also flagged, except in the modes that are explicitly meant to cut.
 Both versions are kept. The original is never replaced, because the whole point
 is that the writer chooses which one to keep.
 
+### How the AI Grader works
+
+A rubric and a grade are separate things, and the schema keeps them separate. A
+rubric is extracted once from whatever the institution supplied — a brief, a
+marking grid, a paragraph of requirements — and is then reusable. A lecturer
+marking thirty submissions, or a student checking four drafts, pays for the
+extraction once and grades against identical criteria every time. That the
+criteria were identical is then demonstrable rather than asserted.
+
+**The arithmetic is ours.** The model is asked to judge each criterion and is
+never asked to add them up; a total it volunteers is discarded. Every awarded
+score is clamped into the range its criterion allows before it is stored, so a
+model returning 12 out of 10 costs nothing and loses nothing. The rubric's own
+total is summed by a database trigger, which means no code path — ours or a
+future one — can leave the header disagreeing with the criteria beneath it.
+
+**An extracted rubric is correctable.** Points carried into a criterion's name
+("Argument (20 marks)") are stripped, duplicates are merged keeping the larger
+allocation, and anything the user still disagrees with can be edited in place.
+A column guard means only the name, description and points can move: a criterion
+cannot be grafted onto another rubric by editing one field, and the derived
+total is not user-writable.
+
+**Nothing here is a grade.** The wording is fixed in one module so no screen can
+quietly present an estimate as a mark. The figure is shown as points against a
+stated maximum — "39 / 50", with the percentage secondary — because a bare
+percentage reads exactly like a mark. There is no letter-grade conversion, and
+that is deliberate: letter boundaries belong to an institution, and inventing
+one would dress a guess up as a registrar's decision. The band is always written
+out beside its colour, and the standing qualification sits next to the number
+rather than behind a link.
+
+Grades are not editable by their owner — a grade a user could rewrite is not
+worth storing — and they outlive the rubric they came from, because each one
+snapshots the criteria it was judged against.
+
 ### Theme
 
 Light, dark or follow-the-system, stored in a cookie and rendered into the HTML
@@ -324,8 +361,8 @@ across every surface.
 | 3 | AI Detector | **Complete** |
 | 4 | Grammar Checker | **Complete** |
 | 5 | Naturalize | **Complete** |
-| 6 | AI Rubric Grader | Next |
-| 7 | Citation Checker | Planned |
+| 6 | AI Rubric Grader | **Complete** |
+| 7 | Citation Checker | Next |
 | 8 | Document and assignment workspaces | Planned |
 | 9 | Writing Coach and priority improvements | Planned |
 | 10 | Subscriptions, payments, plan enforcement | Planned |

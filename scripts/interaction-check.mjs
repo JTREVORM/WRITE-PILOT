@@ -458,6 +458,92 @@ function check(condition, passed, failed) {
   await ctx.close();
 }
 
+// --- grading result -----------------------------------------------------------
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto(
+    `${BASE_URL}${process.env.GRADING_PATH ?? "/shell-preview/grading"}`,
+    { waitUntil: "networkidle" },
+  );
+
+  const body = await page.locator("body").innerText();
+
+  // The headline is computed by the real totalFor over the fixture's criteria
+  // (8 + 16 + 15 of 10 + 20 + 20), so a drift in the arithmetic fails here.
+  check(/39\s*\/\s*50/.test(body), "the headline is the sum of the criteria");
+  check(/78%/.test(body), "the percentage is shown as the secondary figure");
+
+  // Every framing rule from the brief, asserted on the rendered page rather
+  // than on the source string.
+  check(
+    /AI-assisted estimated grade/i.test(body),
+    "the estimate is labelled as AI-assisted, not as a grade",
+  );
+  check(
+    /not an official grade/i.test(body),
+    "the disclaimer says plainly that this is not an official grade",
+  );
+  check(
+    /does not predict how your work will be marked/i.test(body),
+    "the disclaimer disclaims prediction of the real mark",
+  );
+  check(
+    !/(turnitin|undetectable|bypass|guarantee)/i.test(body),
+    "no detector-evasion or guarantee language on the result screen",
+  );
+
+  // The band is never colour alone.
+  check(
+    /Meets most criteria/.test(body),
+    "the band ships with a written label beside its colour",
+  );
+  const meter = page.locator('[role="meter"]').first();
+  check(
+    (await meter.getAttribute("aria-valuenow")) === "39" &&
+      (await meter.getAttribute("aria-valuemax")) === "50",
+    "the meter exposes its value to assistive technology",
+  );
+
+  // The breakdown is the part a student can act on.
+  check(
+    /Argument and analysis/.test(body) && /Use of evidence/.test(body),
+    "every criterion appears in the breakdown",
+  );
+  check(
+    /counter-position is engaged|evaluated alternative explanation/i.test(body),
+    "the breakdown names what the rubric asked for and did not get",
+  );
+
+  // The rubric editor: a misread criterion is correctable in place.
+  await page.getByRole("button", { name: "Edit Use of evidence" }).click();
+  await page.waitForTimeout(200);
+  const nameField = page.getByLabel("Criterion name");
+  check(
+    (await nameField.inputValue()) === "Use of evidence",
+    "editing a criterion opens a form prefilled with its current name",
+  );
+  check(
+    (await page.getByLabel("Points").inputValue()) === "20",
+    "the points field carries the criterion's allocation",
+  );
+
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.waitForTimeout(200);
+  check(
+    (await page.getByLabel("Criterion name").count()) === 0,
+    "cancelling closes the editor without saving",
+  );
+
+  check(errors.length === 0, "no uncaught client errors on the grading screen",
+    `client errors: ${errors.slice(0, 2).join(" | ")}`);
+
+  await page.screenshot({ path: `${SHOT_DIR}/grading-result.png`, fullPage: true });
+  await ctx.close();
+}
+
 await browser.close();
 console.log(failures === 0 ? "\nInteraction checks passed." : `\n${failures} failed.`);
 process.exit(failures === 0 ? 0 : 1);

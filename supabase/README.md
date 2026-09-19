@@ -20,6 +20,7 @@ nor its own UI code for those decisions.
 | `migrations/20250103000000_ai_scans.sql` | `ai_scans`, `ai_scan_segments` and their policies |
 | `migrations/20250104000000_grammar_checks.sql` | `grammar_checks`, `grammar_suggestions`, the status guard |
 | `migrations/20250105000000_naturalize.sql` | `naturalize_runs`, `naturalize_paragraphs` and their policies |
+| `migrations/20250106000000_grading.sql` | `rubrics`, `rubric_criteria`, `grades`, `grade_criteria`, the derived total |
 | `tests/database.test.sql` | Behavioural tests, including the RLS denial cases |
 
 ## Applying it
@@ -66,6 +67,10 @@ suite cleans up after itself and can be re-run. It covers:
   stops a user rewriting what a suggestion would insert
 - naturalize runs: owner-only reads, no client writes (including the integrity
   findings), deletion, and the cascade to paragraph pairs
+- rubrics and grades: the trigger-derived rubric total (including that a user
+  cannot overwrite it), correcting a criterion but not moving it to another
+  rubric, grades being read-only to their owner, and a grade surviving the
+  deletion of the rubric it was produced against
 - **Row Level Security**: that a user cannot read another user's data, cannot
   raise their own credit balance, cannot grant themselves a role, cannot change
   their own plan, and cannot execute any privileged function
@@ -101,6 +106,19 @@ Accepting a suggestion is the user's own decision on their own document, so RLS
 authorises it directly rather than routing it through the service role. The
 column guard is what makes that safe: without it, "accept" could be turned into
 a way to splice arbitrary text into the document the tool then hands back.
+
+**A rubric's total is derived, never written.** `rubrics.total_points` is
+re-summed by a trigger on `rubric_criteria`, so the header and the breakdown
+cannot disagree however the criteria change. The rubric's own column guard makes
+that total read-only to a user session, and lets the re-sum through by checking
+`pg_trigger_depth()` — the guard applies to client statements, not to the
+database's own derived write.
+
+**A grade is not editable by the person it describes.** Its owner may read it and
+delete it; there is no update grant, because a grade a user could rewrite is not
+worth storing. Each grade snapshots the criterion names and maxima it was judged
+against, so deleting a rubric clears the link (`on delete set null`) without
+taking the grades with it.
 
 **Roles are not in the JWT.** They live in `user_roles` and are read per request,
 so revoking an admin takes effect immediately rather than at the next token

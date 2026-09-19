@@ -71,10 +71,10 @@ export const navigation: NavSection[] = [
       },
       {
         label: "AI Grader",
-        href: "/tools/grader",
+        href: routes.grader,
         icon: "grader",
         description: "An estimated grade against a rubric",
-        available: false,
+        available: true,
       },
       {
         label: "Citation Checker",
@@ -157,10 +157,10 @@ export const quickActions: NavItem[] = [
   },
   {
     label: "Grade Assignment",
-    href: "/tools/grader",
+    href: routes.grader,
     icon: "grader",
     description: "Estimate a grade from a rubric",
-    available: false,
+    available: true,
   },
   {
     label: "Check Citations",
