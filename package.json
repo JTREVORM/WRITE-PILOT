@@ -17,7 +17,8 @@
     "test:responsive": "node scripts/responsive-check.mjs",
     "test:interaction": "node scripts/interaction-check.mjs",
     "test:webhook": "node scripts/webhook-check.mjs",
-    "test:security": "node scripts/security-check.mjs"
+    "test:security": "node scripts/security-check.mjs",
+    "test:seo": "node scripts/seo-check.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",

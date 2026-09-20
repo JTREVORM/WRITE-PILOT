@@ -10,7 +10,7 @@ professionals worldwide.
 
 ## Where the project stands
 
-**Phases 1–12 are complete.** Authentication, profiles, roles, plans,
+**All thirteen phases are complete.** Authentication, profiles, roles, plans,
 subscriptions, the credit ledger, usage tracking and Row Level Security (Phase
 1); the streaming dashboard, notification centre, theme control and the rest of
 the application shell (Phase 2); the AI Detector, the provider layer and
@@ -19,9 +19,10 @@ document text extraction (Phase 3); the Grammar Checker (Phase 4); Naturalize
 document library and assignment workspace (Phase 8); the Writing Coach and its
 priority improvement system (Phase 9); subscriptions, payments and plan
 enforcement (Phase 10); the admin dashboard (Phase 11); the security, testing
-and optimisation pass (Phase 12).
+and optimisation pass (Phase 12); the public pages, SEO and launch materials
+(Phase 13).
 
-What remains is the public launch surfaces.
+What to do with a deployment is in [`docs/LAUNCH.md`](docs/LAUNCH.md).
 
 ## Stack
 
@@ -67,6 +68,7 @@ hosted-project configuration checklist.
 | `npm run test:interaction` | Browser check: every interactive surface, driven for real |
 | `npm run test:security` | Browser check: the served headers, and that the CSP breaks nothing |
 | `npm run test:webhook` | Drives the payment webhook with signed and forged deliveries |
+| `npm run test:seo` | Checks robots, sitemap, canonicals and structured data as served |
 | `npm run verify` | Lint, typecheck, unit tests and build |
 | `npm run db:push` | Apply migrations to the linked project |
 | `npm run db:types` | Regenerate `src/types/database.ts` from the local database |
@@ -568,6 +570,38 @@ rows.
 fetching them from a built server and requiring a 404, rather than trusting
 that the guard was not edited out.
 
+### Public pages and honest marketing
+
+The one claim this product could make and must not is that it will get writing
+past a detector. It is the claim competitors lead with, and it is the reason
+the position is stated on a page of its own — `/academic-integrity` — rather
+than in a terms clause: what the tools are for, what is deliberately not built,
+what our numbers actually mean, and what to do when our advice and an
+institution's rules disagree.
+
+**That position is enforced by a test, not by care.** `tests/marketing-integrity.test.ts`
+reads the marketing constants *and the source of every public page* and fails
+on the claims we have decided never to make — beating or bypassing detection,
+"undetectable", absolute accuracy, a guaranteed grade, detection as proof of
+authorship, an AI grade described as official. Copy is allowed to name a claim
+in order to reject it, which is what the FAQ does; a question and its answer
+are read as one unit so the refusal counts. The guard was verified by injecting
+a forbidden claim and confirming it failed.
+
+**The FAQ has one source.** It is read twice — once by the page, once by the
+`FAQPage` structured data — because markup that answers a question the page
+does not is both dishonest and penalised. A check asserts that every question
+in the markup is present in the rendered text.
+
+**Metadata is verified as served, not as written.** `npm run test:seo` reads
+`robots.txt`, `sitemap.xml`, the manifest and `security.txt` from a running
+server, then loads each public page and checks its title, description,
+canonical, Open Graph tags and heading structure. It also asserts the two
+things that fail silently: that the sitemap advertises no page behind
+authentication, and that the sign-in page carries `noindex` — a crawl rule
+stops a page being fetched, but only the header removes one that already
+leaked into an index.
+
 ### Theme
 
 Light, dark or follow-the-system, stored in a cookie and rendered into the HTML
@@ -636,7 +670,7 @@ across every surface.
 | 10 | Subscriptions, payments, plan enforcement | **Complete** |
 | 11 | Admin dashboard and analytics | **Complete** |
 | 12 | Security, testing, optimisation | **Complete** |
-| 13 | Landing page, SEO, legal, launch | Next |
+| 13 | Landing page, SEO, legal, launch | **Complete** |
 
 ## Environment
 

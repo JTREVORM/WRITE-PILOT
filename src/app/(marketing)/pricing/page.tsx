@@ -5,11 +5,13 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { getEntitlementsSafe } from "@/lib/entitlements/service";
 import { listPublicPlans } from "@/lib/billing/queries";
 import { isPaymentsConfigured } from "@/lib/env/server";
+import { routes } from "@/lib/config/routes";
 import { siteConfig } from "@/lib/config/site";
 
 export const metadata: Metadata = {
   title: "Pricing",
   description: `Plans and credits for ${siteConfig.name}. Start free.`,
+  alternates: { canonical: routes.pricing },
 };
 
 export default async function PricingPage() {

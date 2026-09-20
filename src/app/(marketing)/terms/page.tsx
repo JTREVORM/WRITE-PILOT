@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { Alert } from "@/components/ui/alert";
+import { routes } from "@/lib/config/routes";
 import { siteConfig } from "@/lib/config/site";
 
 export const metadata: Metadata = {
   title: "Terms of Service",
+  alternates: { canonical: "/terms" },
   description: "The terms that govern your use of WritePilot.",
 };
 
@@ -78,7 +81,18 @@ export default function TermsPage() {
           </ul>
           <p>
             You remain responsible for complying with the academic integrity
-            rules of your institution.
+            rules of your institution. Our position on that, and what we
+            deliberately do not build, is set out in full on our{" "}
+            <Link
+              href={routes.academicIntegrity}
+              className="font-medium text-brand-700 underline underline-offset-2 dark:text-brand-300"
+            >
+              academic integrity page
+            </Link>
+            .
+          </p>
+          <p>
+            We may suspend or close an account used to breach these rules.
           </p>
         </section>
 
@@ -94,7 +108,27 @@ export default function TermsPage() {
           </p>
           <p>
             Credits are consumed when an operation succeeds. If an operation
-            fails on our side, the credits are returned.
+            fails on our side, the credits are returned automatically — you are
+            charged for work you received, not for work that was attempted.
+          </p>
+          <p>
+            You can cancel at any time through the billing portal. Cancelling
+            stops the next renewal; the plan and its remaining allowance run to
+            the end of the period you have already paid for. We do not refund
+            part-used periods by default, but if something has gone wrong,
+            write to us and we will look at it.
+          </p>
+        </section>
+
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold text-foreground">
+            Fair use of the service
+          </h2>
+          <p>
+            Alongside the credits on your plan, we apply rate limits to protect
+            the service — on how many analyses can be started in a minute, and
+            on repeated sign-in attempts. They are set well above ordinary use
+            and exist to stop automated abuse rather than to meter you.
           </p>
         </section>
 

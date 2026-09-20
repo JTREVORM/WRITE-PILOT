@@ -10,6 +10,7 @@ export const routes = {
   pricing: "/pricing",
   privacy: "/privacy",
   terms: "/terms",
+  academicIntegrity: "/academic-integrity",
 
   login: "/login",
   register: "/register",

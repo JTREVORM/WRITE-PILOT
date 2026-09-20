@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 
 import { Alert } from "@/components/ui/alert";
+import { routes } from "@/lib/config/routes";
 import { siteConfig } from "@/lib/config/site";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description:
     "How WritePilot handles the documents and personal data you entrust to it.",
+  alternates: { canonical: routes.privacy },
 };
 
 const LAST_UPDATED = "18 September 2025";
@@ -62,6 +64,13 @@ export default function PrivacyPage() {
               took and whether it succeeded. We use this for billing, capacity
               planning and detecting abuse.
             </li>
+            <li>
+              <span className="font-medium text-foreground">Payment records</span>{" "}
+              — what you paid and when, and an identifier for the customer
+              record our payment provider holds. We never see or store your
+              card details; they are held by the payment provider, who is the
+              one taking the payment.
+            </li>
           </ul>
           <p>
             We do not sell personal data, and we do not use your documents to
@@ -88,13 +97,43 @@ export default function PrivacyPage() {
 
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-foreground">
+            Who processes it for us
+          </h2>
+          <p>
+            We use a small number of providers to run the service: a database
+            and file-storage host, an AI provider that performs the analysis, a
+            payment provider that takes payments and holds card details, and an
+            email provider for account and notification email. Each receives
+            only what it needs to do its part.
+          </p>
+          <p>
+            Administering {siteConfig.name} does not include reading customers&apos;
+            writing. Our own administrative tools return counts and account
+            state, and the database grants no administrator access to another
+            account&apos;s documents — a restriction we test rather than assert.
+          </p>
+        </section>
+
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold text-foreground">
             Deleting your data
           </h2>
           <p>
-            You can delete any document from your workspace, which removes its
-            stored file and analyses. Deleting your account removes your profile,
-            documents, analyses and credit history. Aggregate, non-identifying
-            usage statistics may be retained.
+            You can delete any document from your workspace, which removes it
+            and the file stored behind it.
+          </p>
+          <p>
+            Checks you have already run keep their own copy of the text they
+            read — a stored report that no longer matched what it reported on
+            would be worse than no report — so they survive the document and
+            are deleted separately, from the check itself. The interface says so
+            before you confirm, not after.
+          </p>
+          <p>
+            Deleting your account removes your profile, documents, files,
+            analyses, assignments and credit history. Aggregate, non-identifying
+            usage statistics and records we are required to keep for accounting
+            may be retained.
           </p>
         </section>
 

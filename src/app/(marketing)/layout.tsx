@@ -71,6 +71,12 @@ export default async function MarketingLayout({
               <Link href={routes.pricing} className="hover:text-foreground">
                 Pricing
               </Link>
+              <Link
+                href={routes.academicIntegrity}
+                className="hover:text-foreground"
+              >
+                Academic integrity
+              </Link>
               <Link href={routes.privacy} className="hover:text-foreground">
                 Privacy
               </Link>
