@@ -25,6 +25,7 @@ nor its own UI code for those decisions.
 | `migrations/20250108000000_workspace.sql` | `documents`, `assignments`, `assignment_drafts`, the storage bucket and its policies |
 | `migrations/20250109000000_coaching.sql` | `analysis_runs`, `improvement_actions`, the priority guard |
 | `migrations/20250110000000_payments.sql` | `billing_customers`, `payment_events`, `payments`, and the functions a webhook calls |
+| `migrations/20250111000000_admin.sql` | Administrative metrics, account lookup and the audited admin actions |
 | `harness/00_harness.sql` | Stand-in for the Supabase schemas the migrations rely on, used by the test script |
 | `tests/database.test.sql` | Behavioural tests, including the RLS denial cases |
 
@@ -92,6 +93,11 @@ suite cleans up after itself and can be re-run. It covers:
   unpaid subscription pays out nothing until it becomes active, that a
   redelivered credit pack grants nothing further, and that every function which
   mints an entitlement is denied to a signed-in user
+- administration: that every admin function refuses a non-admin caller, that
+  credit adjustments, plan changes and role grants are audited with their
+  reason, that an adjustment without a reason is refused, that an administrator
+  cannot remove their own admin role, and — twice over — that an administrator
+  cannot read another account's documents or scans
 - **Row Level Security**: that a user cannot read another user's data, cannot
   raise their own credit balance, cannot grant themselves a role, cannot change
   their own plan, and cannot execute any privileged function
@@ -187,6 +193,19 @@ the payment functions is revoked from `public` as well as from `anon` and
 `authenticated`: Postgres grants it to `public` by default on a new function,
 and revoking only the two roles leaves that inherited grant in place. The suite
 asserts the denial for each one rather than assuming it.
+
+**Administration reads counts, never content.** Every administrative function
+returns account state and totals; none selects a document, a draft, a scan's
+text, a grade or a review. That is enforced below the functions as well: no
+policy on those tables grants an administrator access to another account's
+rows, so the restriction survives a future function that forgets it. The suite
+asserts both halves.
+
+**The admin role is checked in the database, not in the page.** Each admin
+function is `SECURITY DEFINER` and calls `require_admin()` first, so `EXECUTE`
+can be granted to `authenticated` without granting anything. A non-admin
+calling one is refused by Postgres with `42501`, which is what makes the
+client-side guard a convenience rather than the protection.
 
 **Roles are not in the JWT.** They live in `user_roles` and are read per request,
 so revoking an admin takes effect immediately rather than at the next token

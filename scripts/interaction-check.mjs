@@ -944,6 +944,104 @@ function check(condition, passed, failed) {
   await ctx.close();
 }
 
+// --- admin dashboard ----------------------------------------------------------
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto(
+    `${BASE_URL}${process.env.ADMIN_PATH ?? "/shell-preview/admin"}`,
+    { waitUntil: "networkidle" },
+  );
+
+  const main = () => page.locator("main").innerText();
+  const body = await main();
+
+  // The rule the whole feature is shaped by.
+  check(
+    /does not include reading customers'/.test(body),
+    "the dashboard states that administration excludes reading customers' writing",
+  );
+
+  // The chart: one series, so no legend, and the axis carries the values that
+  // are not directly labelled.
+  const figure = page.locator("figure").first();
+  check(
+    /Runs per day/.test(await figure.innerText()),
+    "the chart names its series in the caption rather than a legend box",
+  );
+
+  const bars = await page.locator('[role="img"] > div').count();
+  check(bars === 30, `every day in the window is a column (${bars})`);
+
+  // A day with no activity must still occupy its slot — a chart that omits
+  // quiet days misreports the shape of the month.
+  const heights = await page
+    .locator('[role="img"] > div > div')
+    .evaluateAll((nodes) => nodes.map((node) => node.style.height));
+  check(
+    heights.filter((height) => height === "0%").length === 2,
+    `a day with no runs is a zero-height column, not a gap (${heights.filter((h) => h === "0%").length})`,
+  );
+
+  // The figures exist outside the hover layer.
+  const table = page.locator("figure table");
+  check(
+    (await table.locator("tbody tr").count()) === 30,
+    "the same figures are available as a table",
+  );
+
+  // Hovering reports the exact value for that day.
+  const summaryBefore = await page.locator("figcaption span").last().innerText();
+  await page.locator('[role="img"] > div').nth(25).hover();
+  await page.waitForTimeout(200);
+  const summaryAfter = await page.locator("figcaption span").last().innerText();
+
+  check(
+    summaryAfter !== summaryBefore && /\d+ runs/.test(summaryAfter),
+    `hovering a column reports that day's figures ("${summaryAfter}")`,
+  );
+
+  // The ranking is by magnitude and ordered, not a colour-matching exercise.
+  const features = await page
+    .getByRole("list", { name: "Tools by runs" })
+    .locator("li")
+    .allInnerTexts();
+  check(
+    features[0]?.includes("Grammar Checker") &&
+      features[features.length - 1]?.includes("Deep Document Analysis"),
+    `the tool ranking is ordered by runs, largest first (${features[0]?.split("\n")[0] ?? "none"})`,
+  );
+  check(
+    /\d+ failed/.test(body),
+    "failures are stated in words beside the count, never colour alone",
+  );
+
+  // Administering an account: a reason is required by the form as well as the
+  // database, and the panel says why.
+  check(
+    /An unexplained adjustment|it is recorded in the ledger and\s+the audit log/.test(body),
+    "the panel says that adjustments are recorded",
+  );
+  const reasonRequired = await page
+    .getByLabel("Reason", { exact: true })
+    .first()
+    .getAttribute("required");
+  check(reasonRequired !== null, "a credit adjustment requires a reason");
+
+  check(
+    /cannot remove their own admin role/.test(body),
+    "the panel explains the one role change an administrator may not make",
+  );
+
+  check(errors.length === 0, "no uncaught client errors on the admin screen",
+    `client errors: ${errors.slice(0, 2).join(" | ")}`);
+
+  await page.screenshot({ path: `${SHOT_DIR}/admin.png`, fullPage: true });
+  await ctx.close();
+}
+
 await browser.close();
 console.log(failures === 0 ? "\nInteraction checks passed." : `\n${failures} failed.`);
 process.exit(failures === 0 ? 0 : 1);

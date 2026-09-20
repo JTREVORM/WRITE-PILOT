@@ -784,6 +784,30 @@ export type Database = {
         Args: { p_user_id: string };
         Returns: Json;
       };
+      admin_overview: { Args: Record<string, never>; Returns: Json };
+      admin_usage_series: { Args: { p_days?: number }; Returns: Json };
+      admin_find_users: {
+        Args: { p_query?: string | null; p_limit?: number };
+        Returns: Json;
+      };
+      admin_user_detail: { Args: { p_user_id: string }; Returns: Json };
+      admin_adjust_credits: {
+        Args: { p_user_id: string; p_credits: number; p_reason: string };
+        Returns: Json;
+      };
+      admin_set_plan: {
+        Args: { p_user_id: string; p_plan_key: string; p_reason?: string | null };
+        Returns: string;
+      };
+      admin_set_role: {
+        Args: {
+          p_user_id: string;
+          p_role: AppRole;
+          p_grant: boolean;
+          p_reason?: string | null;
+        };
+        Returns: boolean;
+      };
       record_payment_event: {
         Args: {
           p_provider: string;

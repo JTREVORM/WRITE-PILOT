@@ -406,8 +406,16 @@ begin;
     );
   end $$;
 
-  select wp_test.assert_denied(
-    'select * from public.audit_logs', 'a non-admin cannot read audit logs');
+  -- Reading the audit log is granted to `authenticated` so the admin policy has
+  -- something to allow; for everyone else the policy returns nothing. A filter
+  -- that yields no rows is the right outcome here, not an error.
+  do $$
+  begin
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.audit_logs), 0,
+      'a non-admin sees no audit log rows'
+    );
+  end $$;
 commit;
 
 -- --- a signed-in user, writing ------------------------------------------------
@@ -2158,7 +2166,247 @@ commit;
 
 
 -- =============================================================================
-\echo '== 16. Cleanup =============================================================='
+\echo '== 16. Administration ======================================================='
+-- =============================================================================
+
+-- Alice becomes an administrator. Bob stays an ordinary user, and is the
+-- control for every "an admin still cannot" assertion below.
+do $$
+declare
+  v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+  v_bob   uuid := (select id from wp_test.fixtures where name = 'bob');
+begin
+  insert into public.user_roles (user_id, role)
+  values (v_alice, 'admin'::public.app_role)
+  on conflict do nothing;
+
+  -- Something for Bob that an administrator must never be able to read.
+  insert into public.documents (user_id, title, content, word_count)
+  values (v_bob, 'Bob''s private essay', 'The text Bob wrote.', 500);
+
+  insert into public.ai_scans
+    (user_id, title, content, word_count, character_count, estimated_ai_likelihood)
+  values (v_bob, 'Bob''s scan', 'The text Bob scanned.', 500, 2400, 42);
+
+  perform wp_test.assert(
+    public.is_admin(v_alice), 'the admin role is recognised by is_admin'
+  );
+  perform wp_test.assert(
+    not public.is_admin(v_bob), 'an ordinary user is not an admin'
+  );
+end $$;
+
+begin;
+  set local role authenticated;
+  set local request.jwt.claim.role = 'authenticated';
+
+  -- ---- As an administrator ---------------------------------------------------
+  do $$
+  declare
+    v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+    v_bob   uuid := (select id from wp_test.fixtures where name = 'bob');
+    v_overview jsonb;
+    v_series   jsonb;
+    v_users    jsonb;
+    v_detail   jsonb;
+  begin
+    execute format('set local request.jwt.claim.sub = %L', v_alice);
+
+    v_overview := public.admin_overview();
+    perform wp_test.assert(
+      (v_overview -> 'users' ->> 'total')::int >= 2,
+      'the overview counts every account'
+    );
+    perform wp_test.assert(
+      v_overview ? 'revenue' and v_overview ? 'health',
+      'the overview reports revenue and platform health'
+    );
+
+    -- A day with no activity must be a zero, not a missing point.
+    v_series := public.admin_usage_series(7);
+    perform wp_test.assert_eq(
+      jsonb_array_length(v_series), 7,
+      'the usage series has one point per day, including quiet ones'
+    );
+
+    v_users := public.admin_find_users('bob');
+    perform wp_test.assert_eq(
+      jsonb_array_length(v_users), 1, 'an administrator can find an account by email'
+    );
+    perform wp_test.assert_eq(
+      v_users -> 0 ->> 'id', v_bob::text, 'the search returns the account asked for'
+    );
+
+    v_detail := public.admin_user_detail(v_bob);
+    perform wp_test.assert(
+      (v_detail -> 'content_counts' ->> 'documents')::int >= 1,
+      'an administrator can see how many documents an account has'
+    );
+
+    -- The rule this whole migration is shaped by.
+    perform wp_test.assert(
+      not (v_detail::text ilike '%The text Bob wrote%'),
+      'a user detail view never contains a document''s text'
+    );
+    perform wp_test.assert(
+      not (v_detail::text ilike '%The text Bob scanned%'),
+      'a user detail view never contains a scan''s text'
+    );
+    perform wp_test.assert(
+      not (v_detail::text ilike '%Bob''s private essay%'),
+      'a user detail view does not even contain a document''s title'
+    );
+
+    -- ...and it is not merely that the function omits them. The access does
+    -- not exist: an administrator reading the tables directly sees nothing.
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.documents where user_id = v_bob), 0,
+      'an administrator cannot read another user''s documents'
+    );
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.ai_scans where user_id = v_bob), 0,
+      'an administrator cannot read another user''s scans'
+    );
+  end $$;
+
+  -- ---- As an ordinary user ---------------------------------------------------
+  do $$
+  declare v_bob uuid := (select id from wp_test.fixtures where name = 'bob');
+  begin
+    execute format('set local request.jwt.claim.sub = %L', v_bob);
+
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.audit_logs), 0,
+      'a non-admin sees no audit rows even after the grant'
+    );
+  end $$;
+
+  -- EXECUTE is granted to every authenticated session on purpose: the role
+  -- check is inside each function, so a non-admin is refused by the database
+  -- rather than by a hidden button.
+  select wp_test.assert_denied(
+    'select public.admin_overview()',
+    'a non-admin calling the overview directly is refused');
+  select wp_test.assert_denied(
+    'select public.admin_find_users(null)',
+    'a non-admin cannot search accounts');
+  select wp_test.assert_denied(
+    $q$select public.admin_user_detail(
+         (select id from wp_test.fixtures where name = 'alice'))$q$,
+    'a non-admin cannot read an account detail');
+  select wp_test.assert_denied(
+    $q$select public.admin_adjust_credits(
+         (select id from wp_test.fixtures where name = 'bob'), 1000, 'self-service')$q$,
+    'a non-admin cannot grant themselves credits');
+  select wp_test.assert_denied(
+    $q$select public.admin_set_plan(
+         (select id from wp_test.fixtures where name = 'bob'), 'pro')$q$,
+    'a non-admin cannot put themselves on a paid plan');
+  select wp_test.assert_denied(
+    $q$select public.admin_set_role(
+         (select id from wp_test.fixtures where name = 'bob'),
+         'admin'::public.app_role, true)$q$,
+    'a non-admin cannot make themselves an administrator');
+commit;
+
+-- Administrative actions, and the audit trail they leave.
+begin;
+  set local role authenticated;
+  set local request.jwt.claim.role = 'authenticated';
+
+  do $$
+  declare
+    v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+    v_bob   uuid := (select id from wp_test.fixtures where name = 'bob');
+    v_before integer;
+    v_ok boolean;
+  begin
+    execute format('set local request.jwt.claim.sub = %L', v_alice);
+
+    select balance into v_before from public.credit_wallets where user_id = v_bob;
+
+    perform public.admin_adjust_credits(v_bob, 250, 'Goodwill after an outage');
+
+    perform wp_test.assert_eq(
+      (select balance from public.credit_wallets where user_id = v_bob),
+      v_before + 250, 'an administrator can grant credits'
+    );
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.audit_logs
+       where action = 'admin.credits.adjust' and entity_id = v_bob),
+      1, 'a credit adjustment is audited'
+    );
+    perform wp_test.assert_eq(
+      (select metadata ->> 'reason' from public.audit_logs
+       where action = 'admin.credits.adjust' and entity_id = v_bob),
+      'Goodwill after an outage', 'the audit row records why'
+    );
+
+    -- A reason is not optional: an unexplained adjustment is not auditable.
+    begin
+      perform public.admin_adjust_credits(v_bob, 100, '   ');
+      v_ok := false;
+    exception when others then
+      v_ok := true;
+    end;
+    perform wp_test.assert(v_ok, 'a credit adjustment without a reason is refused');
+
+    -- Roles.
+    perform public.admin_set_role(v_bob, 'educator'::public.app_role, true, 'Verified');
+    perform wp_test.assert(
+      public.has_role(v_bob, 'educator'::public.app_role),
+      'an administrator can grant a role'
+    );
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.audit_logs where action = 'admin.role.grant'),
+      1, 'granting a role is audited'
+    );
+
+    perform public.admin_set_role(v_bob, 'educator'::public.app_role, false, 'Expired');
+    perform wp_test.assert(
+      not public.has_role(v_bob, 'educator'::public.app_role),
+      'an administrator can revoke a role'
+    );
+
+    -- The one change an administrator may not make to themselves.
+    begin
+      perform public.admin_set_role(v_alice, 'admin'::public.app_role, false, 'oops');
+      v_ok := false;
+    exception when others then
+      v_ok := true;
+    end;
+    perform wp_test.assert(
+      v_ok, 'an administrator cannot remove their own admin role'
+    );
+    perform wp_test.assert(
+      public.is_admin(v_alice), 'the last administrator is still an administrator'
+    );
+
+    -- Plan changes.
+    perform public.admin_set_plan(v_bob, 'student', 'Support request #41');
+    perform wp_test.assert_eq(
+      (select pl.key from public.subscriptions s
+       join public.plans pl on pl.id = s.plan_id
+       where s.user_id = v_bob
+         and s.status in ('trialing', 'active', 'past_due', 'paused')),
+      'student', 'an administrator can change an account''s plan'
+    );
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.audit_logs where action = 'admin.plan.set'),
+      1, 'a plan change is audited'
+    );
+
+    -- An administrator reads the audit log; that is what it is for.
+    perform wp_test.assert(
+      (select count(*)::int from public.audit_logs) >= 4,
+      'an administrator can read the audit log'
+    );
+  end $$;
+commit;
+
+
+-- =============================================================================
+\echo '== 17. Cleanup =============================================================='
 -- =============================================================================
 
 do $$ begin

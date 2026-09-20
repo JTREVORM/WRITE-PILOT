@@ -10,7 +10,7 @@ professionals worldwide.
 
 ## Where the project stands
 
-**Phases 1–10 are complete.** Authentication, profiles, roles, plans,
+**Phases 1–11 are complete.** Authentication, profiles, roles, plans,
 subscriptions, the credit ledger, usage tracking and Row Level Security (Phase
 1); the streaming dashboard, notification centre, theme control and the rest of
 the application shell (Phase 2); the AI Detector, the provider layer and
@@ -18,10 +18,10 @@ document text extraction (Phase 3); the Grammar Checker (Phase 4); Naturalize
 (Phase 5); the AI Rubric Grader (Phase 6); the Citation Checker (Phase 7); the
 document library and assignment workspace (Phase 8); the Writing Coach and its
 priority improvement system (Phase 9); subscriptions, payments and plan
-enforcement (Phase 10).
+enforcement (Phase 10); the admin dashboard (Phase 11).
 
-What remains is the admin dashboard, a security and performance pass, and the
-public launch surfaces.
+What remains is a security and performance pass, and the public launch
+surfaces.
 
 ## Stack
 
@@ -98,6 +98,7 @@ src/
     assignments/       Brief form, draft manager
     coach/             Improvement list, priority bands, disclaimer
     billing/           Plan grid, credit packs, billing portal button
+    admin/             Stat tiles, usage chart, tool ranking, account panel
   lib/
     env/               Zod-validated environment, split public vs server-only
     theme/             Theme preference: cookie, server read, server action
@@ -112,6 +113,7 @@ src/
     assignments/       Assignments and their drafts
     coach/             Writing Coach: priority scoring, carried signals, prompts
     billing/           Payments: checkout, portal, webhook handling, status mapping
+    admin/             Administration: metrics, account lookup, axis arithmetic
     documents/         Library, storage paths, signed URLs, text extraction
     supabase/          Browser, server, proxy and service-role clients
     auth/              Sessions, role guards, server actions, provisioning
@@ -469,6 +471,45 @@ price ids are rows in `plans` and `credit_packs`, so the pricing page renders
 whatever the catalogue says. A plan with no provider price id says it cannot be
 bought rather than offering a button that fails on the provider's own page.
 
+### How administration works
+
+One rule decides the shape of the whole feature: **administering WritePilot does
+not require reading customers' writing.**
+
+So every administrative function returns counts, totals and account state, and
+not one of them returns a document, a draft, a scan's text, a grade or a review.
+An administrator can see that an account ran eleven grammar checks; they cannot
+see what was checked. That is not an omission waiting to be filled in — the
+access does not exist, and the test suite proves it twice: once that the
+functions contain no content, and once that an administrator reading the tables
+directly sees zero rows belonging to anyone else.
+
+**The role check lives in the database.** Each function is `SECURITY DEFINER`
+and asks `is_admin()` itself, so `EXECUTE` is granted to every authenticated
+session and a non-admin calling one directly is refused by Postgres rather than
+by a missing button. The page guard decides what is rendered; the function
+decides what is permitted; a bug in the first is a wrong-looking page rather
+than a privilege escalation.
+
+**Every change is audited, with a reason.** Credit adjustments, plan changes and
+role grants each write an audit row in the same transaction as the change. A
+credit adjustment without a reason is refused outright — an adjustment nobody
+can explain six months later is indistinguishable from an unauthorised one.
+
+**An administrator cannot remove their own admin role.** It is the one change
+that cannot be undone by the person making it, so the database refuses it and
+an installation cannot lose its last administrator to a misclick.
+
+**The charts follow the data's job, not decoration.** Runs-per-day is one
+series, so there is no legend — the caption names what is plotted, and a box
+with one swatch would only restate it. Days with no activity render as
+zero-height columns rather than being dropped, because a chart that omits quiet
+days misreports the shape of the month. The tool ranking is a magnitude
+comparison in a single hue rather than nine categorical colours, since the
+question is "which is biggest", not "which is which". Failures are stated in
+words beside their count, never as a colour alone. The figures behind every
+chart are also available as a table.
+
 ### Theme
 
 Light, dark or follow-the-system, stored in a cookie and rendered into the HTML
@@ -535,8 +576,8 @@ across every surface.
 | 8 | Document and assignment workspaces | **Complete** |
 | 9 | Writing Coach and priority improvements | **Complete** |
 | 10 | Subscriptions, payments, plan enforcement | **Complete** |
-| 11 | Admin dashboard and analytics | Next |
-| 12 | Security, testing, optimisation | Planned |
+| 11 | Admin dashboard and analytics | **Complete** |
+| 12 | Security, testing, optimisation | Next |
 | 13 | Landing page, SEO, legal, launch | Planned |
 
 ## Environment
