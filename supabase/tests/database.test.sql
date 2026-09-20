@@ -1857,7 +1857,308 @@ commit;
 
 
 -- =============================================================================
-\echo '== 15. Cleanup =============================================================='
+\echo '== 15. Payments ============================================================='
+-- =============================================================================
+
+-- A provider retries. The event log is what makes "exactly once" true.
+do $$
+declare
+  v_first  boolean;
+  v_second boolean;
+begin
+  v_first := public.record_payment_event(
+    'stripe', 'evt_test_1', 'invoice.paid', '{"id":"in_1"}'::jsonb
+  );
+  v_second := public.record_payment_event(
+    'stripe', 'evt_test_1', 'invoice.paid', '{"id":"in_1"}'::jsonb
+  );
+
+  perform wp_test.assert(v_first, 'the first delivery of an event is claimed');
+  perform wp_test.assert(
+    not v_second, 'a redelivery of the same event is not claimed again'
+  );
+  perform wp_test.assert_eq(
+    (select count(*)::int from public.payment_events where event_id = 'evt_test_1'),
+    1, 'a redelivered event is stored once'
+  );
+
+  perform public.complete_payment_event(
+    'stripe', 'evt_test_1', 'processed'::public.payment_event_status
+  );
+  perform wp_test.assert_eq(
+    (select status::text from public.payment_events where event_id = 'evt_test_1'),
+    'processed', 'an event records how it was handled'
+  );
+end $$;
+
+-- Subscribing: the plan, the wallet and the allowance all follow.
+do $$
+declare
+  v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+  v_start timestamptz := date_trunc('day', now());
+  v_sub   uuid;
+  v_before integer;
+begin
+  select balance into v_before from public.credit_wallets where user_id = v_alice;
+
+  v_sub := public.apply_subscription_state(
+    p_user_id => v_alice,
+    p_plan_key => 'pro',
+    p_interval => 'month'::public.billing_interval,
+    p_status => 'active'::public.subscription_status,
+    p_period_start => v_start,
+    p_period_end => v_start + interval '1 month',
+    p_cancel_at_period_end => false,
+    p_provider => 'stripe',
+    p_customer_id => 'cus_test_1',
+    p_subscription_id => 'sub_test_1'
+  );
+
+  perform wp_test.assert_eq(
+    (select p.key from public.subscriptions s
+     join public.plans p on p.id = s.plan_id where s.id = v_sub),
+    'pro', 'a paid subscription puts the user on the plan they bought'
+  );
+  perform wp_test.assert_eq(
+    (select provider_subscription_id from public.subscriptions where id = v_sub),
+    'sub_test_1', 'the provider''s subscription id is recorded'
+  );
+  perform wp_test.assert_eq(
+    (select monthly_allowance from public.credit_wallets where user_id = v_alice),
+    800, 'the wallet takes the plan''s allowance'
+  );
+  perform wp_test.assert_eq(
+    (select balance from public.credit_wallets where user_id = v_alice),
+    v_before + 800, 'the first period''s credits are granted'
+  );
+
+  -- The same event, delivered again.
+  perform public.apply_subscription_state(
+    p_user_id => v_alice,
+    p_plan_key => 'pro',
+    p_interval => 'month'::public.billing_interval,
+    p_status => 'active'::public.subscription_status,
+    p_period_start => v_start,
+    p_period_end => v_start + interval '1 month',
+    p_cancel_at_period_end => false,
+    p_provider => 'stripe',
+    p_customer_id => 'cus_test_1',
+    p_subscription_id => 'sub_test_1'
+  );
+
+  perform wp_test.assert_eq(
+    (select balance from public.credit_wallets where user_id = v_alice),
+    v_before + 800,
+    'a redelivered subscription event does not grant a second month'
+  );
+  perform wp_test.assert_eq(
+    (select count(*)::int from public.subscriptions
+     where provider_subscription_id = 'sub_test_1'),
+    1, 'a redelivered subscription event does not create a second subscription'
+  );
+
+  -- The next period does grant again.
+  perform public.apply_subscription_state(
+    p_user_id => v_alice,
+    p_plan_key => 'pro',
+    p_interval => 'month'::public.billing_interval,
+    p_status => 'active'::public.subscription_status,
+    p_period_start => v_start + interval '1 month',
+    p_period_end => v_start + interval '2 months',
+    p_cancel_at_period_end => false,
+    p_provider => 'stripe',
+    p_customer_id => 'cus_test_1',
+    p_subscription_id => 'sub_test_1'
+  );
+
+  perform wp_test.assert_eq(
+    (select balance from public.credit_wallets where user_id = v_alice),
+    v_before + 1600, 'the next period grants the allowance again'
+  );
+end $$;
+
+-- A status that does not entitle must not pay out.
+do $$
+declare
+  v_bob uuid := (select id from wp_test.fixtures where name = 'bob');
+  v_before integer;
+begin
+  select balance into v_before from public.credit_wallets where user_id = v_bob;
+
+  perform public.apply_subscription_state(
+    p_user_id => v_bob,
+    p_plan_key => 'student',
+    p_interval => 'month'::public.billing_interval,
+    p_status => 'incomplete'::public.subscription_status,
+    p_period_start => now(),
+    p_period_end => now() + interval '1 month',
+    p_cancel_at_period_end => false,
+    p_provider => 'stripe',
+    p_customer_id => 'cus_test_2',
+    p_subscription_id => 'sub_test_2'
+  );
+
+  perform wp_test.assert_eq(
+    (select balance from public.credit_wallets where user_id = v_bob),
+    v_before, 'an unpaid subscription grants no credits'
+  );
+
+  -- ...and the same subscription, once paid, does.
+  perform public.apply_subscription_state(
+    p_user_id => v_bob,
+    p_plan_key => 'student',
+    p_interval => 'month'::public.billing_interval,
+    p_status => 'active'::public.subscription_status,
+    p_period_start => now(),
+    p_period_end => now() + interval '1 month',
+    p_cancel_at_period_end => false,
+    p_provider => 'stripe',
+    p_customer_id => 'cus_test_2',
+    p_subscription_id => 'sub_test_2'
+  );
+
+  perform wp_test.assert_eq(
+    (select balance from public.credit_wallets where user_id = v_bob),
+    v_before + 300, 'the same subscription pays out once it becomes active'
+  );
+  perform wp_test.assert_eq(
+    (select count(*)::int from public.subscriptions
+     where provider_subscription_id = 'sub_test_2'),
+    1, 'a subscription that changes status stays one subscription'
+  );
+end $$;
+
+-- A credit pack. The provider's reference is the idempotency key.
+do $$
+declare
+  v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+  v_before integer;
+  v_purchased integer;
+  v_first jsonb;
+  v_again jsonb;
+begin
+  select balance, purchased_balance into v_before, v_purchased
+  from public.credit_wallets where user_id = v_alice;
+
+  v_first := public.apply_credit_purchase(
+    p_user_id => v_alice,
+    p_pack_key => 'pack_75',
+    p_provider => 'stripe',
+    p_provider_reference => 'pi_test_1',
+    p_amount_cents => 999
+  );
+
+  perform wp_test.assert_eq(
+    (v_first ->> 'replayed')::boolean, false, 'a new purchase is applied'
+  );
+  perform wp_test.assert_eq(
+    (select purchased_balance from public.credit_wallets where user_id = v_alice),
+    v_purchased + 75, 'a pack adds to the purchased balance, which never expires'
+  );
+  perform wp_test.assert_eq(
+    (select count(*)::int from public.payments where provider_reference = 'pi_test_1'),
+    1, 'a purchase is recorded once for the receipt history'
+  );
+
+  v_again := public.apply_credit_purchase(
+    p_user_id => v_alice,
+    p_pack_key => 'pack_75',
+    p_provider => 'stripe',
+    p_provider_reference => 'pi_test_1',
+    p_amount_cents => 999
+  );
+
+  perform wp_test.assert_eq(
+    (v_again ->> 'replayed')::boolean, true, 'a redelivered purchase reports itself'
+  );
+  perform wp_test.assert_eq(
+    (select purchased_balance from public.credit_wallets where user_id = v_alice),
+    v_purchased + 75, 'a redelivered purchase grants nothing further'
+  );
+  perform wp_test.assert_eq(
+    (select count(*)::int from public.payments where provider_reference = 'pi_test_1'),
+    1, 'a redelivered purchase is not recorded twice'
+  );
+end $$;
+
+-- An invoice, recorded for the receipt history and nothing more.
+do $$
+declare
+  v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+  v_before integer;
+begin
+  select balance into v_before from public.credit_wallets where user_id = v_alice;
+
+  perform public.record_invoice_payment(
+    v_alice, 'stripe', 'in_test_1', 2900, 'usd', 'Invoice A-1'
+  );
+  perform public.record_invoice_payment(
+    v_alice, 'stripe', 'in_test_1', 2900, 'usd', 'Invoice A-1'
+  );
+
+  perform wp_test.assert_eq(
+    (select count(*)::int from public.payments where provider_reference = 'in_test_1'),
+    1, 'a redelivered invoice is recorded once'
+  );
+  perform wp_test.assert_eq(
+    (select currency from public.payments where provider_reference = 'in_test_1'),
+    'USD', 'the currency is stored in the case the constraint requires'
+  );
+  perform wp_test.assert_eq(
+    (select balance from public.credit_wallets where user_id = v_alice),
+    v_before, 'recording an invoice does not itself grant credits'
+  );
+end $$;
+
+begin;
+  set local role authenticated;
+  set local request.jwt.claim.role = 'authenticated';
+
+  do $$
+  declare v_alice uuid := (select id from wp_test.fixtures where name = 'alice');
+  begin
+    execute format('set local request.jwt.claim.sub = %L', v_alice);
+
+    perform wp_test.assert_eq(
+      (select count(*)::int from public.payments), 2,
+      'a user sees their own payment history'
+    );
+  end $$;
+
+  -- The paths that change what a user is entitled to are closed to them.
+  select wp_test.assert_denied(
+    $q$select public.apply_credit_purchase(
+         (select id from wp_test.fixtures where name = 'alice'),
+         'pack_75', 'stripe', 'pi_forged', 0)$q$,
+    'a user cannot grant themselves a credit pack');
+  select wp_test.assert_denied(
+    $q$select public.apply_subscription_state(
+         (select id from wp_test.fixtures where name = 'alice'),
+         'pro', 'month'::public.billing_interval,
+         'active'::public.subscription_status, now(), now() + interval '1 month')$q$,
+    'a user cannot put themselves on a paid plan');
+  select wp_test.assert_denied(
+    $q$select public.record_payment_event('stripe', 'evt_forged', 'invoice.paid')$q$,
+    'a user cannot forge a payment event');
+  select wp_test.assert_denied(
+    $q$select public.record_invoice_payment(
+         (select id from wp_test.fixtures where name = 'alice'),
+         'stripe', 'in_forged', 100)$q$,
+    'a user cannot record a payment they did not make');
+  select wp_test.assert_denied(
+    $q$select count(*) from public.payment_events$q$,
+    'a user cannot read the webhook log');
+  select wp_test.assert_denied(
+    $q$select count(*) from public.billing_customers$q$,
+    'a user cannot read billing customer records');
+  select wp_test.assert_denied(
+    $q$update public.payments set amount_cents = 0$q$,
+    'a user cannot rewrite their own payment history');
+commit;
+
+
+-- =============================================================================
+\echo '== 16. Cleanup =============================================================='
 -- =============================================================================
 
 do $$ begin

@@ -867,6 +867,83 @@ function check(condition, passed, failed) {
   await ctx.close();
 }
 
+// --- billing ------------------------------------------------------------------
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto(
+    `${BASE_URL}${process.env.BILLING_PATH ?? "/shell-preview/billing"}`,
+    { waitUntil: "networkidle" },
+  );
+
+  const main = () => page.locator("main").innerText();
+  const body = await main();
+
+  // The catalogue is rendered from data, not hard-coded, so the figures on the
+  // page are the figures in the row.
+  check(/\$5\.99/.test(body), "a plan price is rendered from the catalogue");
+  check(/300 credits a month/.test(body), "the allowance comes from the plan row");
+  check(
+    /Unlimited documents/.test(body),
+    "a null limit reads as unlimited rather than as zero",
+  );
+
+  // The user's own plan is marked, and cannot be bought again.
+  check(/Your plan/.test(body), "the plan the user is on is marked as theirs");
+  check(
+    (await page.getByRole("button", { name: "Current plan" }).count()) === 1,
+    "the current plan offers no purchase button",
+  );
+
+  // A plan the provider does not know about must say so rather than offer a
+  // button that fails on the provider's own page.
+  const unavailable = await page
+    .getByRole("button", { name: "Not available yet" })
+    .count();
+  check(
+    unavailable === 2,
+    `an unconnected plan and pack both say they cannot be bought (${unavailable})`,
+  );
+
+  // Switching interval reprices in place.
+  await page.getByRole("radio", { name: "Yearly" }).click();
+  await page.waitForTimeout(200);
+  const yearly = await main();
+  check(/\$59\.90/.test(yearly), "switching to yearly shows the yearly price");
+  check(/\/ year/.test(yearly), "the interval is stated beside the price");
+
+  await page.getByRole("radio", { name: "Monthly" }).click();
+  await page.waitForTimeout(200);
+  check(
+    /\$5\.99/.test(await main()),
+    "switching back restores the monthly price",
+  );
+
+  // The one thing this page must never claim.
+  check(
+    /we're setting that up|being confirmed/i.test(body),
+    "a completed checkout says it is being confirmed, not that the plan changed",
+  );
+  check(
+    !/you are now on|upgraded to|your plan has changed/i.test(body),
+    "returning from checkout never asserts a plan change the webhook has not made",
+  );
+
+  // Purchased credits are explained where the decision is made.
+  check(
+    /never expire/.test(body),
+    "the packs say that purchased credits do not expire",
+  );
+
+  check(errors.length === 0, "no uncaught client errors on the billing screen",
+    `client errors: ${errors.slice(0, 2).join(" | ")}`);
+
+  await page.screenshot({ path: `${SHOT_DIR}/billing.png`, fullPage: true });
+  await ctx.close();
+}
+
 await browser.close();
 console.log(failures === 0 ? "\nInteraction checks passed." : `\n${failures} failed.`);
 process.exit(failures === 0 ? 0 : 1);

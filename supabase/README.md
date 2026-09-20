@@ -24,6 +24,7 @@ nor its own UI code for those decisions.
 | `migrations/20250107000000_citations.sql` | `citation_checks`, `citation_entries`, `citation_findings`, the status guard |
 | `migrations/20250108000000_workspace.sql` | `documents`, `assignments`, `assignment_drafts`, the storage bucket and its policies |
 | `migrations/20250109000000_coaching.sql` | `analysis_runs`, `improvement_actions`, the priority guard |
+| `migrations/20250110000000_payments.sql` | `billing_customers`, `payment_events`, `payments`, and the functions a webhook calls |
 | `harness/00_harness.sql` | Stand-in for the Supabase schemas the migrations rely on, used by the test script |
 | `tests/database.test.sql` | Behavioural tests, including the RLS denial cases |
 
@@ -86,6 +87,11 @@ suite cleans up after itself and can be re-run. It covers:
   the guard that stops a user rewriting the advice, re-scoring their own
   priority list, relabelling advice as a measurement, or writing the coach's
   explanation themselves
+- payments: that a redelivered webhook is claimed once, that a redelivered
+  subscription event grants no second month while the next period does, that an
+  unpaid subscription pays out nothing until it becomes active, that a
+  redelivered credit pack grants nothing further, and that every function which
+  mints an entitlement is denied to a signed-in user
 - **Row Level Security**: that a user cannot read another user's data, cannot
   raise their own credit balance, cannot grant themselves a role, cannot change
   their own plan, and cannot execute any privileged function
@@ -169,6 +175,19 @@ pins it along with the advice itself: a user session that could re-score its own
 list would have a list that means nothing, and one that could write `coaching`
 could put words in the tutor's mouth.
 
+**Exactly-once is a schema property, not a convention.** A payment provider
+retries. `payment_events` is keyed on the provider's own event id, so a
+redelivery collides and does no work. Underneath it every state change is keyed
+independently — a plan allowance on the billing period, a credit pack on the
+payment reference — so a delivery that somehow escaped the event log still
+could not pay out twice.
+
+**Nothing that grants an entitlement is callable from a session.** `EXECUTE` on
+the payment functions is revoked from `public` as well as from `anon` and
+`authenticated`: Postgres grants it to `public` by default on a new function,
+and revoking only the two roles leaves that inherited grant in place. The suite
+asserts the denial for each one rather than assuming it.
+
 **Roles are not in the JWT.** They live in `user_roles` and are read per request,
 so revoking an admin takes effect immediately rather than at the next token
 refresh.
@@ -194,6 +213,13 @@ charge twice.
 6. **Storage**: the `documents` bucket is created by the migration and must stay
    private. Nothing serves from it directly; the application mints short-lived
    signed URLs per download.
+7. **Payments**: create the products and prices in the payment provider, then
+   record their price ids in `plans.provider_price_id_monthly` /
+   `provider_price_id_yearly` and `credit_packs.provider_price_id`. They are
+   deliberately not environment variables — repricing should be an `update`.
+   Register the webhook endpoint at `<origin>/api/webhooks/stripe` for
+   `checkout.session.completed`, `customer.subscription.*` and `invoice.paid`,
+   and set `STRIPE_WEBHOOK_SECRET` to its signing secret.
 
 ## Adding a table in a later phase
 

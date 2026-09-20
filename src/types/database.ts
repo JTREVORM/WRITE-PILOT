@@ -318,6 +318,43 @@ export type GradeCriterionRow = {
   improvements: Json;
 };
 
+export type PaymentEventStatus = "received" | "processed" | "ignored" | "failed";
+export type PaymentKind = "subscription" | "credit_pack";
+export type PaymentStatusValue = "succeeded" | "refunded" | "failed";
+
+export type BillingCustomerRow = {
+  user_id: string;
+  provider: string;
+  provider_customer_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PaymentEventRow = {
+  provider: string;
+  event_id: string;
+  type: string;
+  status: PaymentEventStatus;
+  payload: Json;
+  error: string | null;
+  received_at: string;
+  processed_at: string | null;
+};
+
+export type PaymentRow = {
+  id: string;
+  user_id: string;
+  provider: string;
+  provider_reference: string;
+  kind: PaymentKind;
+  status: PaymentStatusValue;
+  amount_cents: number;
+  currency: string;
+  description: string | null;
+  credits_granted: number;
+  created_at: string;
+};
+
 export type ImprovementCategoryValue =
   | "structure"
   | "argument"
@@ -677,6 +714,15 @@ export type Database = {
         NaturalizeParagraphRow,
         "run_id" | "position" | "original_text" | "improved_text"
       >;
+      billing_customers: Table<
+        BillingCustomerRow,
+        "user_id" | "provider_customer_id"
+      >;
+      payment_events: Table<PaymentEventRow, "event_id" | "type">;
+      payments: Table<
+        PaymentRow,
+        "user_id" | "provider_reference" | "kind" | "amount_cents"
+      >;
       analysis_runs: Table<
         AnalysisRunRow,
         "user_id" | "title" | "content" | "word_count"
@@ -737,6 +783,60 @@ export type Database = {
         // manual use in the Supabase SQL editor.
         Args: { p_user_id: string };
         Returns: Json;
+      };
+      record_payment_event: {
+        Args: {
+          p_provider: string;
+          p_event_id: string;
+          p_type: string;
+          p_payload?: Json;
+        };
+        Returns: boolean;
+      };
+      complete_payment_event: {
+        Args: {
+          p_provider: string;
+          p_event_id: string;
+          p_status: PaymentEventStatus;
+          p_error?: string | null;
+        };
+        Returns: void;
+      };
+      apply_subscription_state: {
+        Args: {
+          p_user_id: string;
+          p_plan_key: string;
+          p_interval: BillingInterval;
+          p_status: SubscriptionStatus;
+          p_period_start: string | null;
+          p_period_end: string | null;
+          p_cancel_at_period_end?: boolean;
+          p_provider?: string;
+          p_customer_id?: string | null;
+          p_subscription_id?: string | null;
+        };
+        Returns: string;
+      };
+      apply_credit_purchase: {
+        Args: {
+          p_user_id: string;
+          p_pack_key: string;
+          p_provider?: string;
+          p_provider_reference?: string | null;
+          p_amount_cents?: number | null;
+        };
+        Returns: Json;
+      };
+      record_invoice_payment: {
+        Args: {
+          p_user_id: string;
+          p_provider: string;
+          p_provider_reference: string;
+          p_amount_cents: number;
+          p_currency?: string;
+          p_description?: string | null;
+        };
+        Returns: string | null;
       };
       consume_credits: {
         Args: {

@@ -37,6 +37,18 @@ const serverEnvSchema = z.object({
   AI_MODEL: z.string().min(1).default("claude-opus-5"),
   /** Upper bound on a single analysis, in milliseconds. */
   AI_TIMEOUT_MS: z.coerce.number().int().positive().max(600_000).default(120_000),
+
+  /**
+   * Payments (Stripe). Optional, like every other integration: without them
+   * the plan catalogue is still shown and every purchase path reports itself
+   * as unavailable rather than failing at the point of payment.
+   *
+   * The webhook secret is separate from the API key and is what makes an
+   * incoming request trustworthy. Without it, no webhook is accepted at all --
+   * an unverified body is an unauthenticated instruction to grant credits.
+   */
+  STRIPE_SECRET_KEY: z.string().min(1).optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().min(1).optional(),
 });
 
 const parsed = serverEnvSchema.safeParse(process.env);
@@ -63,3 +75,17 @@ export const isProduction = serverEnv.NODE_ENV === "production";
 
 /** True when AI features can actually run. */
 export const isAiConfigured = Boolean(serverEnv.ANTHROPIC_API_KEY);
+
+/**
+ * True when a user can actually be charged.
+ *
+ * Deliberately requires the service-role key as well: a checkout that
+ * completed with no way to write the resulting plan change would take money
+ * and deliver nothing.
+ */
+export const isPaymentsConfigured = Boolean(
+  serverEnv.STRIPE_SECRET_KEY && serverEnv.SUPABASE_SERVICE_ROLE_KEY,
+);
+
+/** True when an incoming webhook can be verified, and therefore accepted. */
+export const isWebhookConfigured = Boolean(serverEnv.STRIPE_WEBHOOK_SECRET);

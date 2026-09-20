@@ -10,18 +10,18 @@ professionals worldwide.
 
 ## Where the project stands
 
-**Phases 1–9 are complete.** Authentication, profiles, roles, plans,
+**Phases 1–10 are complete.** Authentication, profiles, roles, plans,
 subscriptions, the credit ledger, usage tracking and Row Level Security (Phase
 1); the streaming dashboard, notification centre, theme control and the rest of
 the application shell (Phase 2); the AI Detector, the provider layer and
 document text extraction (Phase 3); the Grammar Checker (Phase 4); Naturalize
 (Phase 5); the AI Rubric Grader (Phase 6); the Citation Checker (Phase 7); the
 document library and assignment workspace (Phase 8); the Writing Coach and its
-priority improvement system (Phase 9).
+priority improvement system (Phase 9); subscriptions, payments and plan
+enforcement (Phase 10).
 
-Every tool and every workspace area in the navigation now links to a route that
-exists. What remains is commercial and administrative: payments, the admin
-dashboard, a security and performance pass, and the public launch surfaces.
+What remains is the admin dashboard, a security and performance pass, and the
+public launch surfaces.
 
 ## Stack
 
@@ -97,6 +97,7 @@ src/
     documents/         Library form, document actions, tool links, selection banner
     assignments/       Brief form, draft manager
     coach/             Improvement list, priority bands, disclaimer
+    billing/           Plan grid, credit packs, billing portal button
   lib/
     env/               Zod-validated environment, split public vs server-only
     theme/             Theme preference: cookie, server read, server action
@@ -110,6 +111,7 @@ src/
     citations/         Citation Checker: parsing, cross-matching, merging, prompt
     assignments/       Assignments and their drafts
     coach/             Writing Coach: priority scoring, carried signals, prompts
+    billing/           Payments: checkout, portal, webhook handling, status mapping
     documents/         Library, storage paths, signed URLs, text extraction
     supabase/          Browser, server, proxy and service-role clients
     auth/              Sessions, role guards, server actions, provisioning
@@ -424,6 +426,49 @@ again. The tutor is told to teach the principle and demonstrate it on one of the
 writer's own sentences, never to rewrite sections — the point is that they can
 do it again next time without paying for it.
 
+### How payments work
+
+The money is held by the payment provider. What lives here is the record of
+what it told us and what we did about it.
+
+**A browser is never told what was bought.** A checkout session's success URL
+is a page anyone can type into the address bar, so it is treated as one: it
+says "we're setting this up", never "you're on Pro now". Entitlements change
+when the provider says so over a signed webhook, and not a moment before. The
+interaction checks assert that the page makes no claim the webhook has not yet
+justified.
+
+**A provider retries, so exactly-once is a schema property.** Each delivery is
+claimed by inserting the provider's own event id as a primary key; the second
+arrival collides and does no work at all. Underneath that, every state change
+is keyed on something stable too — an allowance is granted per billing period,
+a credit pack per payment reference — so even a delivery that slipped past the
+event log could not pay out twice. Both layers are asserted directly.
+
+**The provider is the source of truth.** Subscription events rewrite our record
+from what the provider currently says rather than applying a delta. Events
+arrive out of order; a state reasserted is harmless, a delta applied twice is
+not. The plan is read from the price on the subscription rather than from the
+metadata set at checkout, because a user who upgrades inside the provider's own
+portal never passes through our checkout.
+
+**Nothing that grants anything is reachable from a session.** `EXECUTE` on
+every payment function is revoked from `public` as well as from `anon` and
+`authenticated` — Postgres grants it to `public` by default, and revoking only
+the two roles leaves the inherited grant in place. The database suite proves
+each one is denied to a signed-in user.
+
+**Verification is testable without an account.** A webhook signature is an HMAC
+over the request body and touches no network, so `npm run test:webhook` drives
+the real endpoint with four deliveries — unsigned, wrongly signed, correctly
+signed but replayed an hour later, and correctly signed — and asserts that only
+the last is accepted.
+
+**Repricing is a data change.** Prices, allowances, limits and the provider's
+price ids are rows in `plans` and `credit_packs`, so the pricing page renders
+whatever the catalogue says. A plan with no provider price id says it cannot be
+bought rather than offering a button that fails on the provider's own page.
+
 ### Theme
 
 Light, dark or follow-the-system, stored in a cookie and rendered into the HTML
@@ -489,8 +534,8 @@ across every surface.
 | 7 | Citation Checker | **Complete** |
 | 8 | Document and assignment workspaces | **Complete** |
 | 9 | Writing Coach and priority improvements | **Complete** |
-| 10 | Subscriptions, payments, plan enforcement | Next |
-| 11 | Admin dashboard and analytics | Planned |
+| 10 | Subscriptions, payments, plan enforcement | **Complete** |
+| 11 | Admin dashboard and analytics | Next |
 | 12 | Security, testing, optimisation | Planned |
 | 13 | Landing page, SEO, legal, launch | Planned |
 

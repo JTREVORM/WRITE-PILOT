@@ -48,6 +48,7 @@ const SERVER_LOG_PREFIXES = [
   "[profile]",
   "[provisioning]",
   "[email]",
+  "[billing]",
 ];
 
 const isForwardedServerLog = (text) =>

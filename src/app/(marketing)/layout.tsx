@@ -19,6 +19,19 @@ export default async function MarketingLayout({
           <Logo />
           <div className="flex-1" />
 
+          {/* Hidden on the narrowest screens, where the sign-in and sign-up
+              buttons already fill the row. It stays reachable in the footer. */}
+          <Link
+            href={routes.pricing}
+            className={buttonStyles({
+              variant: "ghost",
+              size: "sm",
+              className: "hidden sm:inline-flex",
+            })}
+          >
+            Pricing
+          </Link>
+
           {user ? (
             <Link href={routes.dashboard} className={buttonStyles({ size: "sm" })}>
               Open workspace
@@ -55,6 +68,9 @@ export default async function MarketingLayout({
               aria-label="Footer"
               className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-foreground-muted"
             >
+              <Link href={routes.pricing} className="hover:text-foreground">
+                Pricing
+              </Link>
               <Link href={routes.privacy} className="hover:text-foreground">
                 Privacy
               </Link>

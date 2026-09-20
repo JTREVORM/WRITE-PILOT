@@ -122,6 +122,13 @@ export const navigation: NavSection[] = [
         available: true,
       },
       {
+        label: "Billing",
+        href: routes.billing,
+        icon: "plan",
+        description: "Plan, credits and payment history",
+        available: true,
+      },
+      {
         label: "Settings",
         href: routes.settings,
         icon: "settings",

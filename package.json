@@ -15,7 +15,8 @@
     "db:reset": "supabase db reset",
     "db:types": "supabase gen types typescript --local > src/types/database.ts",
     "test:responsive": "node scripts/responsive-check.mjs",
-    "test:interaction": "node scripts/interaction-check.mjs"
+    "test:interaction": "node scripts/interaction-check.mjs",
+    "test:webhook": "node scripts/webhook-check.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",
@@ -29,6 +30,7 @@
     "react-dom": "19.2.8",
     "resend": "^6.28.1",
     "server-only": "^0.0.1",
+    "stripe": "^22.6.2",
     "tailwind-merge": "^3.7.0",
     "unpdf": "^1.8.1",
     "zod": "^4.6.5"
