@@ -11,8 +11,33 @@ import type { Database } from "@/types/database";
  * This runs in the middleware because Server Components cannot write cookies;
  * without it a user's session would silently expire mid-visit.
  */
-export async function updateSession(request: NextRequest) {
-  let response = NextResponse.next({ request });
+export async function updateSession(
+  request: NextRequest,
+  /**
+   * Extra request headers to carry through to the render. The proxy uses this
+   * for the per-request CSP nonce, which Next reads back out while rendering.
+   */
+  extraRequestHeaders?: Headers,
+) {
+  /*
+   * Rebuilt from `request.headers` on every call rather than from a snapshot.
+   * `request.cookies.set()` below writes through to the request's own cookie
+   * header, and that rotation is the entire point of this function — copying
+   * the headers once up front would forward the *stale* session to the render
+   * while still setting the new cookie on the response.
+   */
+  const forward = () => {
+    if (!extraRequestHeaders) return NextResponse.next({ request });
+
+    const headers = new Headers(request.headers);
+    for (const [key, value] of extraRequestHeaders) {
+      headers.set(key, value);
+    }
+
+    return NextResponse.next({ request: { headers } });
+  };
+
+  let response = forward();
 
   const supabase = createServerClient<Database>(
     publicEnv.NEXT_PUBLIC_SUPABASE_URL,
@@ -27,7 +52,7 @@ export async function updateSession(request: NextRequest) {
             request.cookies.set(name, value);
           }
 
-          response = NextResponse.next({ request });
+          response = forward();
 
           for (const { name, value, options } of cookiesToSet) {
             response.cookies.set(name, value, options);

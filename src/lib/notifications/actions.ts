@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { requireUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { ok, fail, type ActionResult } from "@/lib/utils/result";
 
@@ -17,6 +18,12 @@ import { ok, fail, type ActionResult } from "@/lib/utils/result";
 export async function markNotificationReadAction(
   id: string,
 ): Promise<ActionResult<null>> {
+  // RLS already scopes the update to the caller's own rows, so a signed-out
+  // request changes nothing. It should not be told it succeeded, though: an
+  // action that reports "done" having done nothing is a bug waiting to be
+  // built on.
+  await requireUser();
+
   const supabase = await createClient();
 
   const { error } = await supabase

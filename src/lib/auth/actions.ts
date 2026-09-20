@@ -6,6 +6,8 @@ import { headers } from "next/headers";
 
 import { createClient } from "@/lib/supabase/server";
 import { publicEnv } from "@/lib/env/public";
+import { enforceRateLimit } from "@/lib/security/rate-limit";
+import { toAppError } from "@/lib/utils/errors";
 import { routes, safeRedirectPath } from "@/lib/config/routes";
 import { ok, fail, type ActionResult } from "@/lib/utils/result";
 import {
@@ -85,6 +87,12 @@ export async function signUpAction(
   }
 
   const input = parsed.data;
+
+  // Keyed on the address being registered, so one mailbox cannot be used to
+  // mint accounts in a loop.
+  const limited = await refuseIfLimited("signUp", input.email);
+  if (limited) return limited;
+
   const supabase = await createClient();
 
   const { data, error } = await supabase.auth.signUp({
@@ -148,6 +156,11 @@ export async function signInAction(
     });
   }
 
+  // Keyed on the address being attempted rather than on a session, because an
+  // attacker guessing passwords has no session to key on.
+  const limited = await refuseIfLimited("signIn", parsed.data.email);
+  if (limited) return limited;
+
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
 
@@ -206,6 +219,9 @@ export async function requestPasswordResetAction(
       fieldErrors: fieldErrorsFrom(parsed.error),
     });
   }
+
+  const limited = await refuseIfLimited("passwordReset", parsed.data.email);
+  if (limited) return limited;
 
   const supabase = await createClient();
 
@@ -376,4 +392,24 @@ export async function updateProfileAction(
   revalidatePath(routes.settings);
   revalidatePath(routes.dashboard);
   return ok(null);
+}
+
+/**
+ * Counts an attempt and turns a refusal into a form error.
+ *
+ * Supabase applies its own limits; these sit in front of them so an attacker
+ * cannot spend the project's shared budget, and so the refusal is a message a
+ * person can read rather than a generic 429.
+ */
+async function refuseIfLimited(
+  name: "signIn" | "signUp" | "passwordReset",
+  email: string,
+): Promise<ActionResult<never> | null> {
+  try {
+    await enforceRateLimit(name, email);
+    return null;
+  } catch (error) {
+    const appError = toAppError(error);
+    return fail(appError.message, { code: appError.code });
+  }
 }

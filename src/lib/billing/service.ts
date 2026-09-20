@@ -7,6 +7,7 @@ import { publicEnv } from "@/lib/env/public";
 import { isPaymentsConfigured } from "@/lib/env/server";
 import { AppError, ERROR_CODES } from "@/lib/utils/errors";
 import { routes } from "@/lib/config/routes";
+import { enforceRateLimit } from "@/lib/security/rate-limit";
 import { BILLING_PROVIDER, getStripe } from "./stripe";
 import type { BillingIntervalValue } from "./status";
 
@@ -103,6 +104,10 @@ export async function createPlanCheckout(params: {
 }): Promise<{ url: string }> {
   assertConfigured();
 
+  // A checkout session creates a record at the provider; a loop of them is a
+  // mess in somebody else's system as well as ours.
+  await enforceRateLimit("checkout", params.userId);
+
   const admin = createAdminClient();
 
   const { data: plan } = await admin
@@ -176,6 +181,10 @@ export async function createPackCheckout(params: {
   packKey: string;
 }): Promise<{ url: string }> {
   assertConfigured();
+
+  // A checkout session creates a record at the provider; a loop of them is a
+  // mess in somebody else's system as well as ours.
+  await enforceRateLimit("checkout", params.userId);
 
   const admin = createAdminClient();
 

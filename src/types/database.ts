@@ -318,6 +318,13 @@ export type GradeCriterionRow = {
   improvements: Json;
 };
 
+export type RateLimitRow = {
+  key: string;
+  window_start: string;
+  count: number;
+  updated_at: string;
+};
+
 export type PaymentEventStatus = "received" | "processed" | "ignored" | "failed";
 export type PaymentKind = "subscription" | "credit_pack";
 export type PaymentStatusValue = "succeeded" | "refunded" | "failed";
@@ -714,6 +721,7 @@ export type Database = {
         NaturalizeParagraphRow,
         "run_id" | "position" | "original_text" | "improved_text"
       >;
+      rate_limits: Table<RateLimitRow, "key" | "window_start">;
       billing_customers: Table<
         BillingCustomerRow,
         "user_id" | "provider_customer_id"
@@ -783,6 +791,14 @@ export type Database = {
         // manual use in the Supabase SQL editor.
         Args: { p_user_id: string };
         Returns: Json;
+      };
+      check_rate_limit: {
+        Args: { p_key: string; p_limit: number; p_window_seconds?: number };
+        Returns: Json;
+      };
+      prune_rate_limits: {
+        Args: { p_older_than_hours?: number };
+        Returns: number;
       };
       admin_overview: { Args: Record<string, never>; Returns: Json };
       admin_usage_series: { Args: { p_days?: number }; Returns: Json };

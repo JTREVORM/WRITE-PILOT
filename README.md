@@ -10,7 +10,7 @@ professionals worldwide.
 
 ## Where the project stands
 
-**Phases 1–11 are complete.** Authentication, profiles, roles, plans,
+**Phases 1–12 are complete.** Authentication, profiles, roles, plans,
 subscriptions, the credit ledger, usage tracking and Row Level Security (Phase
 1); the streaming dashboard, notification centre, theme control and the rest of
 the application shell (Phase 2); the AI Detector, the provider layer and
@@ -18,10 +18,10 @@ document text extraction (Phase 3); the Grammar Checker (Phase 4); Naturalize
 (Phase 5); the AI Rubric Grader (Phase 6); the Citation Checker (Phase 7); the
 document library and assignment workspace (Phase 8); the Writing Coach and its
 priority improvement system (Phase 9); subscriptions, payments and plan
-enforcement (Phase 10); the admin dashboard (Phase 11).
+enforcement (Phase 10); the admin dashboard (Phase 11); the security, testing
+and optimisation pass (Phase 12).
 
-What remains is a security and performance pass, and the public launch
-surfaces.
+What remains is the public launch surfaces.
 
 ## Stack
 
@@ -64,7 +64,9 @@ hosted-project configuration checklist.
 | `npm test` | Unit tests (entitlement policy, routing, theme, formatting) |
 | `npm run test:db` | Rebuilds a scratch Postgres and runs the schema/RLS suite |
 | `npm run test:responsive` | Browser check: overflow and console errors, light and dark |
-| `npm run test:interaction` | Browser check: drawer, notifications, theme, skip link |
+| `npm run test:interaction` | Browser check: every interactive surface, driven for real |
+| `npm run test:security` | Browser check: the served headers, and that the CSP breaks nothing |
+| `npm run test:webhook` | Drives the payment webhook with signed and forged deliveries |
 | `npm run verify` | Lint, typecheck, unit tests and build |
 | `npm run db:push` | Apply migrations to the linked project |
 | `npm run db:types` | Regenerate `src/types/database.ts` from the local database |
@@ -510,6 +512,62 @@ question is "which is biggest", not "which is which". Failures are stated in
 words beside their count, never as a colour alone. The figures behind every
 chart are also available as a table.
 
+### Security posture
+
+The protections built alongside each feature are described with that feature.
+What Phase 12 added is the layer that sits across all of them.
+
+**A nonce-based Content Security Policy**, issued per request from the proxy —
+the only place early enough to mint a nonce. Next reads it back out of the
+request's own header and applies it to every script it emits, which is what
+makes `'strict-dynamic'` workable without hand-tagging tags. Three decisions in
+the policy look like mistakes until you know why, and each is commented where
+it is made: `connect-src` names the Supabase origin, because the browser client
+talks to it directly and a policy that locks users out of their own accounts
+gets switched off within a day; `style-src-attr` allows inline attributes,
+because a meter's width is data computed per render and has no nonce mechanism,
+while `style-src` itself stays strict so an injected `<style>` block is still
+refused; and `'unsafe-eval'` is development-only, where React needs it to
+reconstruct server stacks in the browser.
+
+The policy is verified by loading real pages in a real browser and failing on
+any violation the page reports — in development *and* against a production
+build, because the production policy is the strict one. That check found a real
+error on its first run: development had been given both a nonce and
+`'unsafe-inline'` for styles, and a browser **ignores** `'unsafe-inline'` as
+soon as a nonce appears beside it. The combination is not lenient, it is strict
+and surprising. It is now either/or, with a unit test asserting that no
+directive ever carries both.
+
+**Rate limits**, separate from entitlements and counted in Postgres.
+Entitlements answer "can this account afford this?"; limits answer "is this
+account, or this address, going faster than the service should serve?" A user
+with two thousand credits still should not open forty concurrent analyses, and
+a sign-in form should not accept ten thousand passwords for one email address.
+The counter lives in the database because the application runs as more than one
+instance, and a limit each instance counts for itself is not a limit. It fails
+**open**: a limiter that takes the product down when its own bookkeeping breaks
+has caused a worse outage than the one it prevents, and the authorisation
+checks underneath it are unaffected either way.
+
+The window is floored from `clock_timestamp()` rather than `now()`. `now()` is
+the transaction's start time and does not advance inside one, so a request that
+held a transaction across a window boundary would have kept counting against
+the window it started in — a slow request quietly exempting itself from the
+limit meant to catch it.
+
+**An index behind every foreign key.** Postgres indexes the referenced side of a
+foreign key automatically and the referencing side never, which is fine until
+the referenced row is deleted: enforcing `on delete set null` then scans the
+whole child table, inside the deleting transaction. Deleting a rubric, or
+closing an account, is an ordinary user action that triggers exactly that, so
+each such column is now indexed — partially, where the column is null for most
+rows.
+
+**The development-only preview routes are asserted absent in production**, by
+fetching them from a built server and requiring a 404, rather than trusting
+that the guard was not edited out.
+
 ### Theme
 
 Light, dark or follow-the-system, stored in a cookie and rendered into the HTML
@@ -577,8 +635,8 @@ across every surface.
 | 9 | Writing Coach and priority improvements | **Complete** |
 | 10 | Subscriptions, payments, plan enforcement | **Complete** |
 | 11 | Admin dashboard and analytics | **Complete** |
-| 12 | Security, testing, optimisation | Next |
-| 13 | Landing page, SEO, legal, launch | Planned |
+| 12 | Security, testing, optimisation | **Complete** |
+| 13 | Landing page, SEO, legal, launch | Next |
 
 ## Environment
 

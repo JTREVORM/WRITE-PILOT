@@ -2406,7 +2406,130 @@ commit;
 
 
 -- =============================================================================
-\echo '== 17. Cleanup =============================================================='
+\echo '== 17. Rate limiting ========================================================'
+-- =============================================================================
+
+do $$
+declare
+  v_result jsonb;
+  v_allowed integer := 0;
+  v_refused integer := 0;
+  i integer;
+begin
+  -- A fresh key starts with its full budget.
+  v_result := public.check_rate_limit('test:fresh', 3, 60);
+  perform wp_test.assert_eq(
+    (v_result ->> 'allowed')::boolean, true, 'the first request against a key is allowed'
+  );
+  perform wp_test.assert_eq(
+    (v_result ->> 'remaining')::int, 2, 'the limiter reports what is left'
+  );
+
+  -- Five requests against a limit of three: three pass, two are refused.
+  for i in 1..5 loop
+    v_result := public.check_rate_limit('test:burst', 3, 60);
+    if (v_result ->> 'allowed')::boolean then
+      v_allowed := v_allowed + 1;
+    else
+      v_refused := v_refused + 1;
+    end if;
+  end loop;
+
+  perform wp_test.assert_eq(v_allowed, 3, 'exactly the limit is allowed through');
+  perform wp_test.assert_eq(v_refused, 2, 'everything over the limit is refused');
+
+  -- A refused request still counts: not counting refusals makes a limiter
+  -- free to hammer once you are over it.
+  perform wp_test.assert_eq(
+    (select count from public.rate_limits where key = 'test:burst'),
+    5, 'refused requests are counted too'
+  );
+
+  -- Separate keys have separate budgets.
+  v_result := public.check_rate_limit('test:someone-else', 3, 60);
+  perform wp_test.assert_eq(
+    (v_result ->> 'allowed')::boolean, true,
+    'one key being exhausted does not affect another'
+  );
+
+  -- The window is fixed, so every caller inside it shares one row.
+  perform wp_test.assert_eq(
+    (select count(*)::int from public.rate_limits where key = 'test:burst'),
+    1, 'a window is one row, however many requests land in it'
+  );
+
+  -- A key is required: a null key would silently share one global bucket.
+  begin
+    perform public.check_rate_limit(null, 3, 60);
+    perform wp_test.assert(false, 'a null key should have been refused');
+  exception when others then
+    perform wp_test.assert(true, 'a request with no key is refused');
+  end;
+end $$;
+
+-- A window that has rolled over starts again.
+do $$
+declare v_result jsonb;
+begin
+  -- Exhaust a one-second window, then wait past it.
+  perform public.check_rate_limit('test:window', 1, 1);
+  v_result := public.check_rate_limit('test:window', 1, 1);
+  perform wp_test.assert_eq(
+    (v_result ->> 'allowed')::boolean, false, 'a second request inside the window is refused'
+  );
+
+  perform pg_sleep(1.2);
+
+  v_result := public.check_rate_limit('test:window', 1, 1);
+  perform wp_test.assert_eq(
+    (v_result ->> 'allowed')::boolean, true, 'the next window starts with a full budget'
+  );
+  perform wp_test.assert(
+    (select count(*)::int from public.rate_limits where key = 'test:window') >= 2,
+    'each window is its own row'
+  );
+end $$;
+
+-- Old windows are prunable.
+do $$
+declare v_deleted integer;
+begin
+  insert into public.rate_limits (key, window_start, count)
+  values ('test:ancient', now() - interval '3 days', 9);
+
+  v_deleted := public.prune_rate_limits(24);
+
+  perform wp_test.assert(v_deleted >= 1, 'pruning removes windows that have passed');
+  perform wp_test.assert_eq(
+    (select count(*)::int from public.rate_limits where key = 'test:ancient'),
+    0, 'the pruned window is gone'
+  );
+  perform wp_test.assert(
+    (select count(*)::int from public.rate_limits where key = 'test:burst') = 1,
+    'pruning leaves the current window alone'
+  );
+end $$;
+
+begin;
+  set local role authenticated;
+  set local request.jwt.claim.role = 'authenticated';
+
+  -- A user who could call the limiter could exhaust somebody else's budget by
+  -- naming their key, or exempt themselves by naming a fresh one.
+  select wp_test.assert_denied(
+    $q$select public.check_rate_limit('signin:victim@example.com', 1, 60)$q$,
+    'a user cannot spend another key''s rate budget');
+  select wp_test.assert_denied(
+    $q$select public.prune_rate_limits(0)$q$,
+    'a user cannot clear the rate limit counters');
+  select wp_test.assert_denied(
+    $q$select count(*) from public.rate_limits$q$,
+    'a user cannot read how close anyone is to a limit');
+commit;
+
+
+-- =============================================================================
+\echo '== 18. Cleanup =============================================================='
 -- =============================================================================
 
 do $$ begin

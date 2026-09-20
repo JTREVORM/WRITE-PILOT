@@ -6,6 +6,7 @@ import { consumeCredits, refundCredits } from "@/lib/credits/service";
 import { recordUsage } from "@/lib/usage/service";
 import { getEntitlements } from "@/lib/entitlements/service";
 import { checkFeatureAccess } from "@/lib/entitlements/access";
+import { enforceRateLimit } from "@/lib/security/rate-limit";
 import { AppError, ERROR_CODES, toAppError } from "@/lib/utils/errors";
 import { countWords } from "@/lib/utils/format";
 import { clampRating, orderActions, priorityScore } from "./priority";
@@ -265,6 +266,9 @@ export async function runDeepAnalysis(
     : { instructions: null, rubricSummary: null };
 
   // ---- Entitlement -----------------------------------------------------------
+  // A burst is a burst whether or not the account could afford it.
+  await enforceRateLimit("aiRun", input.userId);
+
   const entitlements = await getEntitlements(input.userId);
   const access = checkFeatureAccess(entitlements, ANALYSIS_FEATURE_KEY, {
     words: wordCount,
@@ -471,6 +475,9 @@ export async function coachImprovement(params: {
   if (action.coaching) {
     return { coaching: action.coaching, charged: false };
   }
+
+  // A burst is a burst whether or not the account could afford it.
+  await enforceRateLimit("aiRun", params.userId);
 
   const entitlements = await getEntitlements(params.userId);
   const access = checkFeatureAccess(entitlements, COACH_FEATURE_KEY, {

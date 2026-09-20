@@ -26,6 +26,7 @@ nor its own UI code for those decisions.
 | `migrations/20250109000000_coaching.sql` | `analysis_runs`, `improvement_actions`, the priority guard |
 | `migrations/20250110000000_payments.sql` | `billing_customers`, `payment_events`, `payments`, and the functions a webhook calls |
 | `migrations/20250111000000_admin.sql` | Administrative metrics, account lookup and the audited admin actions |
+| `migrations/20250112000000_hardening.sql` | `rate_limits`, its counter function, and the indexes behind every foreign key |
 | `harness/00_harness.sql` | Stand-in for the Supabase schemas the migrations rely on, used by the test script |
 | `tests/database.test.sql` | Behavioural tests, including the RLS denial cases |
 
@@ -98,6 +99,10 @@ suite cleans up after itself and can be re-run. It covers:
   reason, that an adjustment without a reason is refused, that an administrator
   cannot remove their own admin role, and — twice over — that an administrator
   cannot read another account's documents or scans
+- rate limiting: that exactly the limit passes and the rest are refused, that a
+  refused request still counts, that one key's exhaustion does not affect
+  another, that a new window starts with a full budget, and that a user can
+  neither spend another key's budget nor read how close anyone is to a limit
 - **Row Level Security**: that a user cannot read another user's data, cannot
   raise their own credit balance, cannot grant themselves a role, cannot change
   their own plan, and cannot execute any privileged function
@@ -207,6 +212,19 @@ can be granted to `authenticated` without granting anything. A non-admin
 calling one is refused by Postgres with `42501`, which is what makes the
 client-side guard a convenience rather than the protection.
 
+**Rate limits are counted here, not in a process.** The application runs as
+more than one instance, and a limit each instance counts for itself is not a
+limit. The window is floored from `clock_timestamp()` rather than `now()`,
+because `now()` is the transaction's start time: a request holding a
+transaction across a window boundary would otherwise keep counting against the
+window it began in. Nothing about the counters is readable by a user — being
+told how close you are to a limit is itself useful to an attacker.
+
+**Every foreign key has an index on its referencing side.** Postgres creates
+one for the referenced side only. Without the other, `on delete set null` scans
+the whole child table inside the deleting transaction — which is what deleting
+a rubric or closing an account does, once per child.
+
 **Roles are not in the JWT.** They live in `user_roles` and are read per request,
 so revoking an admin takes effect immediately rather than at the next token
 refresh.
@@ -227,8 +245,10 @@ charge twice.
    - Default `{{ .ConfirmationURL }}` templates land on `/auth/callback`.
    - Templates using `{{ .TokenHash }}` should point at
      `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email`.
-5. **Scheduled job**: call `public.renew_credit_period(user_id)` for each active
-   subscriber at the start of their period (pg_cron, or an external scheduler).
+5. **Scheduled jobs**: call `public.renew_credit_period(user_id)` for each
+   active subscriber at the start of their period, and
+   `public.prune_rate_limits()` daily to drop windows that have passed
+   (pg_cron, or an external scheduler).
 6. **Storage**: the `documents` bucket is created by the migration and must stay
    private. Nothing serves from it directly; the application mints short-lived
    signed URLs per download.

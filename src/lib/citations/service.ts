@@ -6,6 +6,7 @@ import { consumeCredits, refundCredits } from "@/lib/credits/service";
 import { recordUsage } from "@/lib/usage/service";
 import { getEntitlements } from "@/lib/entitlements/service";
 import { checkFeatureAccess } from "@/lib/entitlements/access";
+import { enforceRateLimit } from "@/lib/security/rate-limit";
 import { AppError, ERROR_CODES, toAppError } from "@/lib/utils/errors";
 import { countWords } from "@/lib/utils/format";
 import { parseDocument } from "./parse";
@@ -68,6 +69,10 @@ export async function checkCitations(
   // ---- 1. The deterministic half ---------------------------------------------
   const parsed = parseDocument(text);
   const { findings: localFindings, coverage } = matchCitations(parsed, style);
+  // Before anything is read or charged: a burst is a burst whether or not
+  // the account could afford it.
+  await enforceRateLimit("aiRun", input.userId);
+
 
   // ---- 2. Entitlement --------------------------------------------------------
   const entitlements = await getEntitlements(input.userId);

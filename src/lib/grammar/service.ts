@@ -6,6 +6,7 @@ import { consumeCredits, refundCredits } from "@/lib/credits/service";
 import { recordUsage } from "@/lib/usage/service";
 import { getEntitlements } from "@/lib/entitlements/service";
 import { checkFeatureAccess } from "@/lib/entitlements/access";
+import { enforceRateLimit } from "@/lib/security/rate-limit";
 import { AppError, ERROR_CODES, toAppError } from "@/lib/utils/errors";
 import { splitSentenceSpans } from "@/lib/text/segment";
 import { analyzeReadability } from "./readability";
@@ -63,6 +64,10 @@ export async function runGrammarCheck(
   if (sentenceSpans.length === 0) {
     throw new AppError(ERROR_CODES.UNSUPPORTED_FILE, "There is no text to check.");
   }
+  // Before anything is read or charged: a burst is a burst whether or not
+  // the account could afford it.
+  await enforceRateLimit("aiRun", input.userId);
+
 
   // ---- 2. Entitlement --------------------------------------------------------
   const entitlements = await getEntitlements(input.userId);

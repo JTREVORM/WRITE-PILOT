@@ -16,7 +16,8 @@
     "db:types": "supabase gen types typescript --local > src/types/database.ts",
     "test:responsive": "node scripts/responsive-check.mjs",
     "test:interaction": "node scripts/interaction-check.mjs",
-    "test:webhook": "node scripts/webhook-check.mjs"
+    "test:webhook": "node scripts/webhook-check.mjs",
+    "test:security": "node scripts/security-check.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",

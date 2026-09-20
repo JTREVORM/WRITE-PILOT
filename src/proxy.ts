@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { updateSession } from "@/lib/supabase/middleware";
+import { buildCsp, createNonce } from "@/lib/security/csp";
 import {
   isAuthOnlyRoute,
   isProtectedRoute,
@@ -20,17 +21,43 @@ import {
  * guards in `src/lib/auth/guards.ts` that actually protect data. Role checks in
  * particular are deliberately *not* made here, because this layer would have to
  * trust a token claim it cannot cheaply verify against the database.
+ *
+ * It is also where the Content Security Policy is issued, because the policy
+ * carries a per-request nonce and nothing further down the stack runs early
+ * enough to mint one. Next reads the nonce back out of the request's own
+ * `Content-Security-Policy` header and applies it to every script it emits,
+ * which is what makes `'strict-dynamic'` workable without hand-tagging tags.
  */
 export async function proxy(request: NextRequest) {
-  const { response, user } = await updateSession(request);
+  const nonce = createNonce();
+  const csp = buildCsp({
+    nonce,
+    isDev: process.env.NODE_ENV === "development",
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  });
+
+  // Next extracts the nonce from the *request* header during rendering, so it
+  // has to be set on the way in as well as on the way out.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("content-security-policy", csp);
+
+  const { response, user } = await updateSession(request, requestHeaders);
   const { pathname, search } = request.nextUrl;
+
+  response.headers.set("content-security-policy", csp);
+
+  const withCsp = (redirect: NextResponse) => {
+    redirect.headers.set("content-security-policy", csp);
+    return redirect;
+  };
 
   if (!user && isProtectedRoute(pathname)) {
     const url = request.nextUrl.clone();
     url.pathname = routes.login;
     url.search = "";
     url.searchParams.set("next", `${pathname}${search}`);
-    return NextResponse.redirect(url);
+    return withCsp(NextResponse.redirect(url));
   }
 
   if (user && isAuthOnlyRoute(pathname)) {
@@ -40,7 +67,7 @@ export async function proxy(request: NextRequest) {
       routes.dashboard,
     );
     url.search = "";
-    return NextResponse.redirect(url);
+    return withCsp(NextResponse.redirect(url));
   }
 
   return response;
